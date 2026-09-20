@@ -1,215 +1,453 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from 'react';
+import { Star, Plus, ArrowLeft, Wand2, Loader2, Search, Bookmark, CheckCircle2, Home, X, Calendar, Info } from 'lucide-react';
 
-// --- 型定義 ---
-type Movie = {
-  id: number;
-  title: string;
-  posterUrl: string;
-  releaseDate: string;
-  description: string;
-};
+// --- 初期表示用のモックデータ ---
+const MOCK_MOVIES = [
+  { 
+    id: 'm1', title: '劇場版 呪術廻戦 0', genre: 'アニメ', category: 'おすすめ', 
+    posterUrl: 'https://image.tmdb.org/t/p/w600_and_h900_bestv2/mktxHLSKIK1aXjJ9UxaA3wT69dO.jpg',
+    releaseDate: '2021-12-24',
+    apiSynopsis: '幼少のころ、幼なじみの祈本里香を交通事故により目の前で失った乙骨憂太。怨霊と化した里香の呪いに苦しみ、自身の死を望む乙骨だったが、最強の呪術師・五条悟によって呪術高専に迎え入れられる。'
+  },
+  { 
+    id: 'm2', title: 'ザ・スーパーマリオブラザーズ・ムービー', genre: 'アニメ・ゲーム', category: 'アニメ・ゲーム', 
+    posterUrl: 'https://image.tmdb.org/t/p/w600_and_h900_bestv2/qNBAXBIQlnOAW9YRcgxotFCVW3U.jpg',
+    releaseDate: '2023-04-28',
+    apiSynopsis: 'ニューヨークで配管工を営む双子の兄弟マリオとルイージ。謎の土管を通じて魔法に満ちた新世界に迷い込んだ二人は、離れ離れになってしまう。マリオは弟を見つけ出すため、壮大な冒険へと旅立つ。'
+  },
+  { 
+    id: 'm3', title: 'ダークナイト', genre: 'アクション', category: '名作アクション', 
+    posterUrl: 'https://image.tmdb.org/t/p/w600_and_h900_bestv2/qJ2tW6WMUDux911r6m7haRef0WH.jpg',
+    releaseDate: '2008-08-09',
+    apiSynopsis: 'ゴッサム・シティーに、究極の悪が舞い降りた。ジョーカーと名乗るその男は、マフィアたちを操り、バットマンを嘲笑うかのように次々と犯罪を繰り返す。バットマンは最強の敵を前に、すべてを賭けた戦いに挑む。'
+  },
+  { 
+    id: 'm4', title: 'インセプション', genre: 'SF', category: '名作アクション', 
+    posterUrl: 'https://image.tmdb.org/t/p/w600_and_h900_bestv2/9gk7adHYeDvHkCSEqAvQNLV5Uge.jpg',
+    releaseDate: '2010-07-23',
+    apiSynopsis: '人が眠っている間にその潜在意識に侵入し、他人のアイデアを盗み出すという犯罪分野のスペシャリストのコブ。彼に課せられたミッションは、他人の頭の中にアイデアを植え付ける「インセプション」だった。'
+  },
+  { 
+    id: 'm5', title: 'ショーシャンクの空に', genre: 'ドラマ', category: '名作ヒューマンドラマ', 
+    posterUrl: 'https://image.tmdb.org/t/p/w600_and_h900_bestv2/q6y0Go1tsGEsmtFryDOJo3dEmqu.jpg',
+    releaseDate: '1995-06-03',
+    apiSynopsis: '妻とその愛人を射殺した罪でショーシャンク刑務所送りとなった銀行員アンディ。初めは戸惑っていたが、やがて彼は自らの信念と希望を失わず、刑務所内の人間関係を静かに変えていく。'
+  }
+];
+
+const CATEGORIES = ['おすすめ', '名作アクション', 'アニメ・ゲーム', '名作ヒューマンドラマ'];
 
 export default function App() {
-  // --- 状態管理 (State) ---
-  const [searchQuery, setSearchQuery] = useState("アクション"); // 初期検索ワード
-  const [movies, setMovies] = useState<Movie[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [myList, setMyList] = useState<number[]>([]); // 「みたい！」に追加した映画のIDリスト
-  
-  // AI生成用の状態
-  const [aiTexts, setAiTexts] = useState<Record<number, string>>({});
-  const [aiLoading, setAiLoading] = useState<Record<number, boolean>>({});
+  const [activeTab, setActiveTab] = useState('home');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [myCollection, setMyCollection] = useState<any[]>([]);
+  const [modalMode, setModalMode] = useState<string | null>(null); 
+  const [viewingMovie, setViewingMovie] = useState<any>(null);
 
-  // --- 1. 映画検索機能 (iTunes APIを使用) ---
-  const fetchMovies = async (query: string) => {
-    if (!query) return;
-    setLoading(true);
-    try {
-      // iTunesの公開APIを利用（APIキー不要で映画データが取れます）
-      const url = `https://itunes.apple.com/search?term=${encodeURIComponent(
-        query
-      )}&entity=movie&country=JP&lang=ja_jp&limit=10`;
-      
-      const response = await fetch(url);
-      const data = await response.json();
+  const [editScore, setEditScore] = useState(50);
+  const [editAiContent, setEditAiContent] = useState('');
+  const [editMyReview, setEditMyReview] = useState('');
+  const [isAiLoading, setIsAiLoading] = useState(false);
 
-      // 使いやすい形にデータを整形
-      const formattedMovies: Movie[] = data.results.map((item: any) => ({
-        id: item.trackId,
-        title: item.trackName,
-        // iTunesの画像URLを高画質(400x400)に変換
-        posterUrl: item.artworkUrl100 ? item.artworkUrl100.replace("100x100bb", "400x400bb") : "",
-        releaseDate: item.releaseDate ? item.releaseDate.split("T")[0] : "不明",
-        description: item.longDescription || "あらすじ情報がありません。",
-      }));
-
-      setMovies(formattedMovies);
-    } catch (error) {
-      console.error("映画の取得に失敗しました", error);
-      alert("映画データの取得に失敗しました。");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // 初回表示時に検索を実行
   useEffect(() => {
-    fetchMovies(searchQuery);
-  }, []);
+    if (!searchQuery.trim()) {
+      setSearchResults([]);
+      setIsSearching(false);
+      return;
+    }
 
-  // 検索ボタンを押した時の処理
-  const handleSearchSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    fetchMovies(searchQuery);
-  };
-
-  // --- 2. 「みたい！」ボタンの処理 ---
-  const toggleMyList = (movieId: number) => {
-    setMyList((prevList) => {
-      // すでにリストにある場合は削除、ない場合は追加
-      if (prevList.includes(movieId)) {
-        return prevList.filter((id) => id !== movieId);
-      } else {
-        return [...prevList, movieId];
+    setIsSearching(true);
+    const delayDebounceFn = setTimeout(async () => {
+      try {
+        const response = await fetch(`https://itunes.apple.com/search?media=movie&term=${encodeURIComponent(searchQuery)}&country=JP&lang=ja_jp&limit=20`);
+        const data = await response.json();
+        const mappedResults = data.results.map((track: any) => ({
+          id: track.trackId.toString(),
+          title: track.trackName,
+          genre: track.primaryGenreName,
+          posterUrl: track.artworkUrl100 ? track.artworkUrl100.replace('100x100bb', '600x900bb') : '',
+          releaseDate: track.releaseDate ? track.releaseDate.substring(0, 10) : '不明',
+          apiSynopsis: track.longDescription || 'あらすじ情報がありません。'
+        }));
+        setSearchResults(mappedResults);
+      } catch (error) {
+        console.error("iTunes API Error:", error);
+      } finally {
+        setIsSearching(false);
       }
+    }, 500);
+
+    return () => clearTimeout(delayDebounceFn);
+  }, [searchQuery]);
+
+  const getCollectionData = useCallback((movieId: string) => {
+    return myCollection.find(item => item.movieId === movieId);
+  }, [myCollection]);
+
+  const openDetailModal = (movie: any) => {
+    setViewingMovie(movie);
+    setModalMode('detail');
+  };
+
+  const openReviewModal = (movie: any) => {
+    const existing = getCollectionData(movie.id);
+    setViewingMovie(movie);
+    setEditScore(existing?.score || 50);
+    setEditAiContent(existing?.aiContent || '');
+    setEditMyReview(existing?.myReview || '');
+    setModalMode('review');
+  };
+
+  const handleAddWatchlist = (movie: any) => {
+    setMyCollection(prev => [...prev, { 
+      movieId: movie.id, 
+      movieData: movie,
+      status: 'watchlist',
+      updatedAt: Date.now()
+    }]);
+    setModalMode(null);
+  };
+
+  const handleSaveReview = () => {
+    if (!viewingMovie) return;
+    setMyCollection(prev => {
+      const filtered = prev.filter(item => item.movieId !== viewingMovie.id);
+      return [...filtered, {
+        movieId: viewingMovie.id,
+        movieData: viewingMovie,
+        status: 'watched',
+        score: editScore,
+        aiContent: editAiContent,
+        myReview: editMyReview,
+        updatedAt: Date.now()
+      }];
     });
+    setModalMode(null);
+    setActiveTab('watched');
   };
 
-  // --- 3. AIによる紹介文生成機能 (モック) ---
-  const generateAiDescription = async (movie: Movie) => {
-    // ローディング開始
-    setAiLoading((prev) => ({ ...prev, [movie.id]: true }));
-
-    // ※ここに本来はChatGPTやGeminiのAPIを呼び出す処理を書きます。
-    // 今回はAIが考えているように見せるため、1.5秒待機させます。
-    await new Promise((resolve) => setTimeout(resolve, 1500));
-
-    // タイトルを使ったそれっぽい紹介文を生成
-    const mockAiResponse = `【AIからのオススメ！】\n『${movie.title}』は必見の映画です！\n公開日は${movie.releaseDate}。心揺さぶる展開と魅力的なキャラクターたちが、あなたを素晴らしい映像体験へと導いてくれるでしょう。休日のリラックスタイムにポップコーンと一緒に楽しむのがおすすめです！`;
-
-    // 結果を保存
-    setAiTexts((prev) => ({ ...prev, [movie.id]: mockAiResponse }));
-    setAiLoading((prev) => ({ ...prev, [movie.id]: false }));
+  const handleGenerateAiPlot = () => {
+    if (!viewingMovie) return;
+    setIsAiLoading(true);
+    setTimeout(() => {
+      const mockPlot = `【${viewingMovie.title} の展開】\n物語の序盤、主人公は予期せぬトラブルに巻き込まれ、仲間と共に困難な旅に出ます。中盤では最大の挫折を経験し、一度は諦めかけますが、かつての敵が味方になるなど予期せぬ助けを得て立ち直ります。\n\n【結末】\n最終決戦では自己犠牲を伴う決断を迫られますが、知恵と勇気で最悪の事態を回避。黒幕の真の目的が明らかになり、衝撃の事実とともに物語は幕を閉じます。世界は平和を取り戻しますが、主人公の心には静かな変化が訪れていました。`;
+      setEditAiContent(mockPlot);
+      setIsAiLoading(false);
+    }, 1500);
   };
 
-  // --- 画面の描画 (UI) ---
-  return (
-    <div className="min-h-screen bg-gray-50 pb-20">
-      {/* ヘッダー (スマホ向けに上部固定) */}
-      <header className="sticky top-0 z-10 bg-white shadow-sm px-4 py-4">
-        <h1 className="text-xl font-bold text-gray-800 text-center">
-          🎬 映画ディスカバリー
-        </h1>
-      </header>
+  const renderDetailModal = () => {
+    if (!viewingMovie) return null;
+    const collectionData = getCollectionData(viewingMovie.id);
+    const status = collectionData?.status || 'none';
 
-      <main className="p-4 max-w-md mx-auto">
-        {/* 検索フォーム */}
-        <form onSubmit={handleSearchSubmit} className="flex gap-2 mb-6">
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="映画のタイトルなどで検索..."
-            className="flex-1 border border-gray-300 rounded-lg px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-          <button
-            type="submit"
-            className="bg-blue-600 text-white px-5 py-3 rounded-lg font-semibold active:bg-blue-700 transition"
-          >
-            検索
+    return (
+      <div className="absolute inset-0 bg-[#141414] z-50 flex flex-col pb-safe animate-in slide-in-from-bottom-10 fade-in duration-300">
+        <header className="flex items-center p-4 bg-gradient-to-b from-black/80 to-transparent absolute top-0 left-0 right-0 z-10">
+          <button onClick={() => setModalMode(null)} className="p-2.5 bg-black/40 backdrop-blur-md text-white rounded-full hover:bg-black/60 transition">
+            <ArrowLeft size={20} />
           </button>
-        </form>
+        </header>
 
-        {/* ローディング表示 */}
-        {loading && (
-          <div className="text-center py-10 text-gray-500 font-medium">
-            映画を探しています...
+        <div className="flex-1 overflow-y-auto">
+          {/* Netflix風の大型ヒーローヘッダー */}
+          <div className="relative w-full aspect-[2/3] max-h-[60vh] bg-zinc-900 flex justify-center overflow-hidden">
+            <div className="absolute inset-0 bg-cover bg-center blur-xl opacity-40 scale-110" style={{ backgroundImage: `url(${viewingMovie.posterUrl})` }} />
+            {viewingMovie.posterUrl ? (
+              <img src={viewingMovie.posterUrl} alt={viewingMovie.title} className="relative h-full w-full object-cover shadow-2xl" />
+            ) : (
+              <div className="relative h-full flex items-center justify-center text-zinc-600">No Image</div>
+            )}
+            <div className="absolute bottom-0 left-0 right-0 h-40 bg-gradient-to-t from-[#141414] via-[#141414]/80 to-transparent" />
           </div>
-        )}
 
-        {/* 映画リスト表示 */}
-        <div className="flex flex-col gap-6">
-          {!loading && movies.length === 0 && (
-            <div className="text-center py-10 text-gray-500">
-              映画が見つかりませんでした。別のキーワードでお試しください。
+          <div className="px-5 -mt-8 relative z-10 space-y-6 pb-28">
+            <div>
+              <h2 className="text-3xl font-extrabold text-white leading-tight mb-3 drop-shadow-lg">{viewingMovie.title}</h2>
+              <div className="flex flex-wrap items-center gap-3 text-xs font-semibold text-zinc-300">
+                <span className="text-green-500 font-bold">98% マッチ</span>
+                <span className="flex items-center gap-1"><Calendar size={14} /> {viewingMovie.releaseDate.substring(0, 4)}</span>
+                <span className="px-2 py-0.5 bg-zinc-800/80 rounded border border-zinc-700">{viewingMovie.genre}</span>
+              </div>
             </div>
+
+            <div className="space-y-3">
+              <p className="text-sm text-zinc-300 leading-relaxed whitespace-pre-wrap font-medium">
+                {viewingMovie.apiSynopsis}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* 下部アクションボタン (固定) */}
+        <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-[#141414] via-[#141414]/95 to-transparent pt-12 pb-safe border-t border-zinc-800/50">
+          {status === 'none' && (
+            <button onClick={() => handleAddWatchlist(viewingMovie)} className="w-full py-3.5 bg-white text-black font-bold rounded-md flex justify-center items-center gap-2 hover:bg-zinc-200 active:scale-95 transition-all text-base">
+              <Plus size={22} /> マイリストに追加
+            </button>
+          )}
+          
+          {status === 'watchlist' && activeTab === 'home' && (
+            <button disabled className="w-full py-3.5 bg-zinc-800/80 text-white font-bold rounded-md flex justify-center items-center gap-2 text-base backdrop-blur-sm">
+              <CheckCircle2 size={22} className="text-green-500" /> リスト追加済み
+            </button>
           )}
 
-          {movies.map((movie) => {
-            const isWanted = myList.includes(movie.id);
-            const isAiLoading = aiLoading[movie.id];
-            const aiText = aiTexts[movie.id];
+          {status === 'watchlist' && activeTab === 'watchlist' && (
+            <button onClick={() => setModalMode('review')} className="w-full py-3.5 bg-red-600 text-white font-bold rounded-md flex justify-center items-center gap-2 hover:bg-red-700 active:scale-95 transition-all text-base shadow-[0_0_15px_rgba(220,38,38,0.4)]">
+              <Star size={22} className="fill-white" /> レビューを記録する
+            </button>
+          )}
 
-            return (
-              <div
-                key={movie.id}
-                className="bg-white rounded-2xl shadow-md overflow-hidden border border-gray-100"
+          {status === 'watched' && (
+            <button disabled className="w-full py-3.5 bg-zinc-900 border border-zinc-800 text-white font-bold rounded-md flex justify-center items-center gap-2 text-base">
+              <CheckCircle2 size={22} className="text-green-500" /> 鑑賞済み (スコア: {collectionData.score})
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  const renderReviewModal = () => {
+    if (!viewingMovie) return null;
+
+    return (
+      <div className="absolute inset-0 bg-[#141414] z-[60] flex flex-col pb-safe animate-in slide-in-from-bottom-10 fade-in duration-300">
+        <header className="flex items-center justify-between p-4 bg-[#141414]/90 backdrop-blur-md sticky top-0 z-10 border-b border-zinc-800/50">
+          <button onClick={() => setModalMode(null)} className="p-2 text-zinc-400 hover:text-white transition">
+            <X size={24} />
+          </button>
+          <span className="font-bold text-sm text-zinc-100">レビューを記録</span>
+          <button onClick={handleSaveReview} className="text-white font-bold text-sm px-4 py-1.5 bg-red-600 rounded active:scale-95 transition-transform hover:bg-red-700">
+            保存
+          </button>
+        </header>
+
+        <div className="flex-1 overflow-y-auto p-5 space-y-8 pb-24">
+          <div className="flex gap-4 items-center bg-zinc-900/50 p-3 rounded-lg border border-zinc-800/50">
+            {viewingMovie.posterUrl ? (
+              <img src={viewingMovie.posterUrl} alt={viewingMovie.title} className="w-14 h-20 object-cover rounded shadow-md bg-zinc-800" />
+            ) : (
+              <div className="w-14 h-20 bg-zinc-800 rounded shadow-md"></div>
+            )}
+            <div className="flex-1">
+              <h2 className="text-base font-bold text-white leading-tight line-clamp-2">{viewingMovie.title}</h2>
+              <p className="text-xs text-zinc-400 mt-1">{viewingMovie.releaseDate}</p>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <div className="flex justify-between items-center">
+              <label className="text-sm font-bold text-zinc-300">マイ評価スコア</label>
+              <span className="text-3xl font-black text-red-500">{editScore}<span className="text-sm text-zinc-500 font-normal"> /100</span></span>
+            </div>
+            <input
+              type="range" min="0" max="100" value={editScore}
+              onChange={(e) => setEditScore(Number(e.target.value))}
+              className="w-full accent-red-600 h-2 bg-zinc-800 rounded-lg appearance-none cursor-pointer mt-4"
+            />
+          </div>
+
+          <div className="space-y-3">
+            <div className="flex justify-between items-end">
+              <label className="text-sm font-bold text-purple-400 flex items-center gap-2">
+                <Wand2 size={16} /> AIによる展開・結末
+              </label>
+              <button 
+                onClick={handleGenerateAiPlot} disabled={isAiLoading}
+                className="text-xs px-3 py-1.5 bg-purple-600/20 text-purple-400 rounded-full font-bold flex items-center gap-1 active:scale-95 transition-transform border border-purple-500/30"
               >
-                {/* 映画ポスター */}
-                {movie.posterUrl ? (
-                  <img
-                    src={movie.posterUrl}
-                    alt={movie.title}
-                    className="w-full h-64 object-cover bg-gray-200"
-                  />
-                ) : (
-                  <div className="w-full h-64 bg-gray-200 flex items-center justify-center text-gray-400">
-                    画像なし
-                  </div>
-                )}
+                {isAiLoading ? <Loader2 size={14} className="animate-spin" /> : <Wand2 size={14} />}
+                {isAiLoading ? '生成中...' : '自動生成'}
+              </button>
+            </div>
+            <p className="text-[11px] text-zinc-500 mb-2">※AIのハルシネーション対策のため、事実と異なる場合は自由に修正できます。</p>
+            <textarea
+              value={editAiContent}
+              onChange={(e) => setEditAiContent(e.target.value)}
+              placeholder="ここにAIが映画の展開から結末までを生成します。自分で直接書き込むことも可能です。"
+              className="w-full bg-zinc-900/50 border border-purple-900/30 rounded-lg p-4 text-zinc-200 text-sm focus:outline-none focus:border-purple-500/50 min-h-[160px] leading-relaxed resize-none transition"
+            />
+          </div>
 
-                <div className="p-4 flex flex-col gap-4">
-                  {/* タイトルと公開日 */}
-                  <div>
-                    <h2 className="text-xl font-bold text-gray-800 leading-tight">
-                      {movie.title}
-                    </h2>
-                    <p className="text-sm text-gray-500 mt-1">
-                      公開: {movie.releaseDate}
-                    </p>
-                  </div>
+          <div className="space-y-3">
+            <label className="text-sm font-bold text-white">自分の感想</label>
+            <textarea
+              value={editMyReview}
+              onChange={(e) => setEditMyReview(e.target.value)}
+              placeholder="ネタバレとは分けて、ここには率直な感想や感情を記録しましょう..."
+              className="w-full bg-zinc-900/50 border border-zinc-800 rounded-lg p-4 text-zinc-200 text-sm focus:outline-none focus:border-zinc-500 min-h-[120px] resize-none transition"
+            />
+          </div>
+        </div>
+      </div>
+    );
+  };
 
-                  {/* あらすじ */}
-                  <p className="text-gray-600 text-sm line-clamp-3">
-                    {movie.description}
-                  </p>
+  const renderHome = () => {
+    return (
+      <div className="flex-1 overflow-y-auto pb-24 bg-[#141414]">
+        <div className="sticky top-0 z-20 bg-gradient-to-b from-[#141414] via-[#141414]/90 to-transparent pt-6 pb-6 px-4">
+          <div className="relative shadow-lg">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400" size={18} />
+            <input
+              type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="映画タイトルで検索..."
+              className="w-full bg-zinc-800/80 border border-zinc-700/50 rounded-md py-3 pl-12 pr-4 text-white text-sm focus:outline-none focus:ring-1 focus:ring-zinc-500 backdrop-blur-md transition-all placeholder:text-zinc-500"
+            />
+            {searchQuery && (
+              <button onClick={() => setSearchQuery('')} className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-400 p-1 hover:text-white">
+                <X size={18} />
+              </button>
+            )}
+          </div>
+        </div>
 
-                  {/* AI紹介文エリア */}
-                  <div className="bg-blue-50 rounded-xl p-4">
-                    {aiText ? (
-                      <div className="text-sm text-blue-900 whitespace-pre-wrap">
-                        {aiText}
-                      </div>
+        {searchQuery ? (
+          <div className="px-4">
+            <h3 className="text-zinc-400 text-sm font-bold mb-4 flex items-center gap-2">
+              検索結果 {isSearching && <Loader2 size={14} className="animate-spin text-red-500" />}
+            </h3>
+            {searchResults.length > 0 ? (
+              <div className="grid grid-cols-3 gap-2">
+                {searchResults.map((movie: any) => (
+                  <div key={movie.id} onClick={() => openDetailModal(movie)} className="cursor-pointer active:scale-95 transition-transform group">
+                    {movie.posterUrl ? (
+                      <img src={movie.posterUrl} alt={movie.title} className="w-full aspect-[2/3] object-cover rounded bg-zinc-800 group-hover:opacity-80 transition" />
                     ) : (
-                      <button
-                        onClick={() => generateAiDescription(movie)}
-                        disabled={isAiLoading}
-                        className="w-full py-2 bg-white border border-blue-200 text-blue-600 font-semibold rounded-lg text-sm flex justify-center items-center active:bg-blue-100 transition"
-                      >
-                        {isAiLoading ? "AIが考えています..." : "✨ AIに紹介文を生成してもらう"}
-                      </button>
+                      <div className="w-full aspect-[2/3] bg-zinc-800 rounded flex items-center justify-center p-2 text-center text-[10px] text-zinc-500 border border-zinc-700">
+                        {movie.title}
+                      </div>
                     )}
                   </div>
-
-                  {/* みたい！ボタン */}
-                  <button
-                    onClick={() => toggleMyList(movie.id)}
-                    className={`w-full py-3 rounded-xl font-bold text-lg transition-colors flex items-center justify-center gap-2
-                      ${
-                        isWanted
-                          ? "bg-pink-100 text-pink-600 border border-pink-200"
-                          : "bg-pink-500 text-white active:bg-pink-600 shadow-sm"
-                      }
-                    `}
-                  >
-                    {isWanted ? "👀 みたい！リストに追加済み" : "💖 みたい！"}
-                  </button>
-                </div>
+                ))}
               </div>
-            );
-          })}
-        </div>
-      </main>
+            ) : (
+              !isSearching && <p className="text-zinc-500 text-sm text-center mt-10">見つかりませんでした</p>
+            )}
+          </div>
+        ) : (
+          <div className="space-y-8 pb-8 mt-2">
+            {CATEGORIES.map(category => {
+              const rowMovies = MOCK_MOVIES.filter(m => m.category === category);
+              if (rowMovies.length === 0) return null;
+              return (
+                <div key={category} className="space-y-2">
+                  <h3 className="text-zinc-100 font-bold text-base px-4">{category}</h3>
+                  <div className="flex overflow-x-auto snap-x px-4 gap-2 pb-4 pt-1 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+                    {rowMovies.map(movie => {
+                      const status = getCollectionData(movie.id)?.status;
+                      return (
+                        <div key={movie.id} onClick={() => openDetailModal(movie)} className="flex-none w-[105px] md:w-[120px] snap-start relative rounded overflow-hidden active:scale-95 transition-transform cursor-pointer group">
+                          <img src={movie.posterUrl} alt={movie.title} className="w-full h-full aspect-[2/3] object-cover bg-zinc-800 group-hover:brightness-75 transition-all duration-300" />
+                          {status && (
+                            <div className="absolute top-1 right-1 bg-black/70 rounded-full p-1 backdrop-blur-md border border-white/10">
+                              {status === 'watched' ? <CheckCircle2 size={12} className="text-green-500" /> : <Bookmark size={12} className="text-white" />}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const renderMyList = (statusFilter: 'watchlist' | 'watched') => {
+    const list = myCollection
+      .filter(item => item.status === statusFilter)
+      .sort((a, b) => b.updatedAt - a.updatedAt)
+      .map(item => ({
+        ...item.movieData,
+        collectionData: item
+      }));
+
+    const title = statusFilter === 'watched' ? '鑑賞済み' : 'マイリスト';
+
+    return (
+      <div className="flex-1 overflow-y-auto pb-24 bg-[#141414] px-4 pt-6">
+        <h2 className="text-2xl font-black text-white mb-6">{title}</h2>
+        {list.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-[50vh] text-zinc-600">
+            {statusFilter === 'watched' ? <CheckCircle2 size={48} className="opacity-20 mb-4" /> : <Bookmark size={48} className="opacity-20 mb-4" />}
+            <p className="text-sm font-medium">まだ作品がありません</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-3 gap-2">
+            {list.map((movie: any) => (
+              <div 
+                key={movie.id} 
+                onClick={() => statusFilter === 'watched' ? openReviewModal(movie) : openDetailModal(movie)} 
+                className="relative rounded overflow-hidden active:scale-95 transition-transform cursor-pointer group"
+              >
+                {movie.posterUrl ? (
+                  <img src={movie.posterUrl} alt={movie.title} className="w-full aspect-[2/3] object-cover bg-zinc-800 group-hover:brightness-75 transition-all" />
+                ) : (
+                  <div className="w-full aspect-[2/3] bg-zinc-800 flex items-center justify-center text-center text-[10px] text-zinc-500 border border-zinc-700 p-2">
+                    {movie.title}
+                  </div>
+                )}
+                
+                {statusFilter === 'watched' && movie.collectionData.score > 0 && (
+                  <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black via-black/80 to-transparent p-2 pt-6 flex justify-center">
+                    <div className="flex items-center gap-1 bg-black/60 px-2 py-0.5 rounded-full backdrop-blur-sm border border-white/10">
+                      <Star size={10} className="text-red-500 fill-red-500" />
+                      <span className="text-xs text-white font-bold">{movie.collectionData.score}</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  return (
+    <div className="bg-black min-h-screen flex justify-center font-sans selection:bg-red-900/30 text-zinc-200">
+      <div className="w-full max-w-md h-[100dvh] bg-[#141414] shadow-2xl overflow-hidden relative border-x border-zinc-900 flex flex-col">
+        
+        {!modalMode && activeTab === 'home' && renderHome()}
+        {!modalMode && activeTab === 'watchlist' && renderMyList('watchlist')}
+        {!modalMode && activeTab === 'watched' && renderMyList('watched')}
+        
+        {modalMode === 'detail' && renderDetailModal()}
+        {modalMode === 'review' && renderReviewModal()}
+
+        {/* Netflixライクなボトムナビゲーション */}
+        <nav className="absolute bottom-0 left-0 right-0 bg-[#141414]/95 backdrop-blur-xl border-t border-zinc-800/60 flex justify-around items-center pb-safe pt-2 px-2 z-40">
+          <button onClick={() => { setActiveTab('home'); setModalMode(null); }} className={`flex flex-col items-center p-2 transition-colors ${activeTab === 'home' ? 'text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>
+            <Home size={22} className={activeTab === 'home' ? 'stroke-[2.5px]' : ''} />
+            <span className="text-[10px] mt-1 font-bold">ホーム</span>
+          </button>
+          <button onClick={() => { setActiveTab('watchlist'); setModalMode(null); }} className={`flex flex-col items-center p-2 transition-colors ${activeTab === 'watchlist' ? 'text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>
+            <Bookmark size={22} className={activeTab === 'watchlist' ? 'fill-white' : ''} />
+            <span className="text-[10px] mt-1 font-bold">マイリスト</span>
+          </button>
+          <button onClick={() => { setActiveTab('watched'); setModalMode(null); }} className={`flex flex-col items-center p-2 transition-colors ${activeTab === 'watched' ? 'text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>
+            <CheckCircle2 size={22} className={activeTab === 'watched' ? 'fill-white text-[#141414] stroke-[1.5px]' : ''} />
+            <span className="text-[10px] mt-1 font-bold">鑑賞済み</span>
+          </button>
+        </nav>
+      </div>
+
+      <style dangerouslySetInnerHTML={{__html: `
+        .pb-safe { padding-bottom: max(1rem, env(safe-area-inset-bottom)); }
+        .animate-in { animation: animateIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+        @keyframes animateIn {
+          from { opacity: 0; transform: translateY(30px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+      `}} />
     </div>
   );
 }
