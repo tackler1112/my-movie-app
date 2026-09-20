@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Hero } from './components/Hero.tsx';
 import { MovieCard } from './components/MovieCard.tsx';
-import { getGenres, getTrendingMovies, getNowPlayingMovies, discoverMovies } from './lib/tmdb.tsx';
+import { getGenres, getTrendingMovies, getNowPlayingMovies, discoverMovies } from './lib/tmdb.ts';
 import { Movie, Genre } from './types.ts';
 
 function App() {
