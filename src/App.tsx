@@ -2,6 +2,9 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Star, Plus, ArrowLeft, Wand2, Loader2, Search, Bookmark, CheckCircle2, Home, X, Calendar, Edit3 } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
 
+// --- APIキー設定 (Vite環境変数) ---
+const tmdbApiKey = import.meta.env?.VITE_TMDB_API_KEY || '';
+
 // --- Supabase 初期化 ---
 const supabaseUrl = import.meta.env?.VITE_SUPABASE_URL || '';
 const supabaseKey = import.meta.env?.VITE_SUPABASE_ANON_KEY || '';
@@ -74,41 +77,43 @@ export default function App() {
     fetchCollection();
   }, []);
 
-  // --- ホーム画面の映画をAPIから一括取得する処理 ---
+  // --- ホーム画面の映画をTMDb APIから一括取得する処理 ---
   useEffect(() => {
     const fetchHomeMovies = async () => {
       setIsHomeLoading(true);
-      const categoryKeywords: Record<string, string> = {
-        'おすすめ': 'japan',
-        '名作アクション': 'action',
-        'アニメ・ゲーム': 'anime',
-        '名作ヒューマンドラマ': 'drama'
+
+      const categoryEndpoints: Record<string, string> = {
+        'おすすめ': `https://api.themoviedb.org/3/movie/popular?api_key=${tmdbApiKey}&language=ja-JP&page=1`,
+        '名作アクション': `https://api.themoviedb.org/3/search/movie?api_key=${tmdbApiKey}&language=ja-JP&query=${encodeURIComponent('アクション')}&page=1`,
+        'アニメ・ゲーム': `https://api.themoviedb.org/3/search/movie?api_key=${tmdbApiKey}&language=ja-JP&query=${encodeURIComponent('アニメ')}&page=1`,
+        '名作ヒューマンドラマ': `https://api.themoviedb.org/3/search/movie?api_key=${tmdbApiKey}&language=ja-JP&query=${encodeURIComponent('ドラマ')}&page=1`
       };
 
       const newCategoryData: Record<string, any[]> = {};
 
       for (const cat of CATEGORIES) {
-        const term = categoryKeywords[cat] || 'movie';
+        const url = categoryEndpoints[cat];
         try {
-          const res = await fetch(`https://itunes.apple.com/search?media=movie&term=${encodeURIComponent(term)}&country=JP&lang=ja_jp&limit=8`);
+          if (!tmdbApiKey) throw new Error('TMDb API Key is missing');
+          const res = await fetch(url);
           if (!res.ok) throw new Error('API request failed');
           const data = await res.json();
-          
+
           if (data.results && data.results.length > 0) {
-            newCategoryData[cat] = data.results.map((track: any) => ({
-              id: track.trackId ? track.trackId.toString() : Math.random().toString(),
-              title: track.trackName,
-              genre: track.primaryGenreName || cat,
+            newCategoryData[cat] = data.results.slice(0, 8).map((movie: any) => ({
+              id: movie.id.toString(),
+              title: movie.title || movie.original_title,
+              genre: cat,
               category: cat,
-              posterUrl: track.artworkUrl100 ? track.artworkUrl100.replace('100x100bb', '600x900bb') : '',
-              releaseDate: track.releaseDate ? track.releaseDate.substring(0, 10) : '2023',
-              apiSynopsis: track.longDescription || 'あらすじ情報がありません。'
+              posterUrl: movie.poster_path ? `https://image.tmdb.org/t/p/w500${movie.poster_path}` : '',
+              releaseDate: movie.release_date || '不明',
+              apiSynopsis: movie.overview || 'あらすじ情報がありません。'
             }));
           } else {
             newCategoryData[cat] = FALLBACK_MOVIES[cat];
           }
         } catch (err) {
-          console.warn(`Failed to fetch category "${cat}" from API, using fallback:`, err);
+          console.warn(`Failed to fetch category "${cat}" from TMDb API, using fallback:`, err);
           newCategoryData[cat] = FALLBACK_MOVIES[cat];
         }
       }
@@ -120,7 +125,7 @@ export default function App() {
     fetchHomeMovies();
   }, []);
 
-  // --- 検索機能 ---
+  // --- TMDb 検索機能 ---
   useEffect(() => {
     if (!searchQuery.trim()) {
       setSearchResults([]);
@@ -131,23 +136,24 @@ export default function App() {
     setIsSearching(true);
     const delayDebounceFn = setTimeout(async () => {
       try {
-        const response = await fetch(`https://itunes.apple.com/search?media=movie&term=${encodeURIComponent(searchQuery)}&country=JP&lang=ja_jp&limit=20`);
+        if (!tmdbApiKey) throw new Error('TMDb API Key is missing');
+        const response = await fetch(`https://api.themoviedb.org/3/search/movie?api_key=${tmdbApiKey}&language=ja-JP&query=${encodeURIComponent(searchQuery)}&page=1`);
         if (!response.ok) throw new Error('API request failed');
-        
+
         const data = await response.json();
-        const mappedResults = data.results.map((track: any) => ({
-          id: track.trackId ? track.trackId.toString() : Math.random().toString(),
-          title: track.trackName,
-          genre: track.primaryGenreName,
-          posterUrl: track.artworkUrl100 ? track.artworkUrl100.replace('100x100bb', '600x900bb') : '',
-          releaseDate: track.releaseDate ? track.releaseDate.substring(0, 10) : '不明',
-          apiSynopsis: track.longDescription || 'あらすじ情報がありません。'
+        const mappedResults = data.results.map((movie: any) => ({
+          id: movie.id.toString(),
+          title: movie.title || movie.original_title,
+          genre: '映画',
+          posterUrl: movie.poster_path ? `https://image.tmdb.org/t/p/w500${movie.poster_path}` : '',
+          releaseDate: movie.release_date || '不明',
+          apiSynopsis: movie.overview || 'あらすじ情報がありません。'
         }));
         setSearchResults(mappedResults);
       } catch (error) {
-        console.warn("API Search failed, using fallback data instead:", error);
+        console.warn("TMDb API Search failed, using fallback data instead:", error);
         const allFallback = Object.values(FALLBACK_MOVIES).flat();
-        const fallbackResults = allFallback.filter(m => 
+        const fallbackResults = allFallback.filter(m =>
           m.title.toLowerCase().includes(searchQuery.toLowerCase())
         );
         setSearchResults(fallbackResults);
@@ -199,20 +205,20 @@ export default function App() {
 
   // 「みたい！」ボタンを押したときの処理（リストに追加してホームに戻る）
   const handleAddWatchlist = async (movie: any) => {
-    const newEntry = { 
-      movieId: movie.id, 
+    const newEntry = {
+      movieId: movie.id,
       movieData: movie,
       status: 'watchlist',
       updatedAt: Date.now()
     };
-    
+
     setMyCollection(prev => {
       const filtered = prev.filter(item => item.movieId !== movie.id);
       return [...filtered, newEntry];
     });
 
     await saveToSupabase(newEntry);
-    
+
     setModalMode(null);
     setActiveTab('home');
     setSearchQuery('');
@@ -236,7 +242,7 @@ export default function App() {
     });
 
     await saveToSupabase(reviewEntry);
-    
+
     setModalMode(null);
     setActiveTab('watched');
   };
@@ -247,11 +253,11 @@ export default function App() {
     setTimeout(() => {
       const title = viewingMovie.title;
       const intro = viewingMovie.apiSynopsis && viewingMovie.apiSynopsis !== 'あらすじ情報がありません。'
-        ? viewingMovie.apiSynopsis.substring(0, 40) + '…という波乱の幕開けから始まる本作。' 
+        ? viewingMovie.apiSynopsis.substring(0, 40) + '…という波乱の幕開けから始まる本作。'
         : '主人公が予期せぬトラブルに巻き込まれるところから始まる本作。';
 
       const aiGeneratedMockText = `【『${title}』の内容・展開予測】\n${intro}中盤では最大の挫折を経験し、一度は諦めかけますが、かつての敵が味方になるなど予期せぬ助けを得て立ち直ります。\n\n【結末】\n最終決戦では自己犠牲を伴う決断を迫られますが、知恵と勇気で最悪の事態を回避。『${title}』ならではの衝撃の事実とともに物語は幕を閉じます。`;
-      
+
       setEditAiContent(aiGeneratedMockText);
       setIsAiLoading(false);
     }, 2000);
@@ -291,7 +297,7 @@ export default function App() {
                 <span className="px-2 py-0.5 bg-zinc-800/80 rounded border border-zinc-700">{viewingMovie.genre}</span>
               </div>
             </div>
-            
+
             <div className="space-y-3">
               <p className="text-sm text-zinc-300 leading-relaxed whitespace-pre-wrap font-medium">
                 {viewingMovie.apiSynopsis}
@@ -331,23 +337,23 @@ export default function App() {
           {fromTab === 'home' && (
             <div className="flex gap-3">
               {status === 'none' ? (
-                <button 
-                  onClick={() => handleAddWatchlist(viewingMovie)} 
+                <button
+                  onClick={() => handleAddWatchlist(viewingMovie)}
                   className="flex-1 py-3.5 bg-zinc-800 text-white font-bold rounded-md flex justify-center items-center gap-2 hover:bg-zinc-700 active:scale-95 transition-all text-sm cursor-pointer border border-zinc-700"
                 >
                   <Plus size={18} /> みたい！
                 </button>
               ) : (
-                <button 
-                  disabled 
+                <button
+                  disabled
                   className="flex-1 py-3.5 bg-zinc-900 text-zinc-500 font-bold rounded-md flex justify-center items-center gap-2 text-sm border border-zinc-800 cursor-not-allowed"
                 >
                   <CheckCircle2 size={18} className="text-green-500" /> 追加済み
                 </button>
               )}
 
-              <button 
-                onClick={() => openReviewModal(viewingMovie)} 
+              <button
+                onClick={() => openReviewModal(viewingMovie)}
                 className="flex-1 py-3.5 bg-red-600 text-white font-bold rounded-md flex justify-center items-center gap-2 hover:bg-red-700 active:scale-95 transition-all text-sm shadow-[0_0_15px_rgba(220,38,38,0.4)] cursor-pointer"
               >
                 <Star size={18} className="fill-white" /> {status === 'watched' ? 'レビューを編集' : 'レビューする'}
@@ -356,8 +362,8 @@ export default function App() {
           )}
 
           {fromTab === 'watchlist' && (
-            <button 
-              onClick={() => openReviewModal(viewingMovie)} 
+            <button
+              onClick={() => openReviewModal(viewingMovie)}
               className="w-full py-3.5 bg-red-600 text-white font-bold rounded-md flex justify-center items-center gap-2 hover:bg-red-700 active:scale-95 transition-all text-base shadow-[0_0_15px_rgba(220,38,38,0.4)] cursor-pointer"
             >
               <Star size={22} className="fill-white" /> レビューを記録する
@@ -365,8 +371,8 @@ export default function App() {
           )}
 
           {fromTab === 'watched' && (
-            <button 
-              onClick={() => openReviewModal(viewingMovie)} 
+            <button
+              onClick={() => openReviewModal(viewingMovie)}
               className="w-full py-3.5 bg-zinc-800 text-white font-bold rounded-md flex justify-center items-center gap-2 hover:bg-zinc-700 active:scale-95 transition-all text-base cursor-pointer border border-zinc-700"
             >
               <Edit3 size={18} /> 編集する
@@ -423,7 +429,7 @@ export default function App() {
               <label className="text-sm font-bold text-purple-400 flex items-center gap-2">
                 <Wand2 size={16} /> 内容
               </label>
-              <button 
+              <button
                 onClick={handleGenerateAiPlot} disabled={isAiLoading}
                 className="text-xs px-3 py-1.5 bg-purple-600/20 text-purple-400 rounded-full font-bold flex items-center gap-1 active:scale-95 transition-transform border border-purple-500/30 cursor-pointer"
               >
@@ -567,9 +573,9 @@ export default function App() {
         ) : (
           <div className="grid grid-cols-3 gap-2">
             {list.map((movie: any) => (
-              <div 
-                key={movie.id} 
-                onClick={() => openDetailModal(movie, statusFilter)} 
+              <div
+                key={movie.id}
+                onClick={() => openDetailModal(movie, statusFilter)}
                 className="relative rounded overflow-hidden active:scale-95 transition-transform cursor-pointer group"
               >
                 {movie.posterUrl ? (
@@ -579,7 +585,7 @@ export default function App() {
                     {movie.title}
                   </div>
                 )}
-                
+
                 {statusFilter === 'watched' && movie.collectionData.score > 0 && (
                   <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black via-black/80 to-transparent p-2 pt-6 flex justify-center z-10">
                     <div className="flex items-center gap-1 bg-black/60 px-2 py-0.5 rounded-full backdrop-blur-sm border border-white/10">
@@ -599,7 +605,7 @@ export default function App() {
   return (
     <div className="bg-black min-h-screen flex justify-center font-sans selection:bg-red-900/30 text-zinc-200">
       <div className="w-full max-w-md h-[100dvh] bg-[#141414] shadow-2xl overflow-hidden relative border-x border-zinc-900 flex flex-col">
-        
+
         {modalMode === 'detail' && renderDetailModal()}
         {modalMode === 'review' && renderReviewModal()}
 
