@@ -1,5 +1,13 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Star, Plus, ArrowLeft, Wand2, Loader2, Search, Bookmark, CheckCircle2, Home, X, Calendar, Info } from 'lucide-react';
+import { createClient } from '@supabase/supabase-js';
+
+// --- Supabase 初期化 ---
+// Vercel等で設定した環境変数から読み込みます
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
+const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+// URLとKeyが存在する場合のみクライアントを作成（エラー落ちを防ぐため）
+const supabase = supabaseUrl && supabaseKey ? createClient(supabaseUrl, supabaseKey) : null;
 
 // --- 初期表示用のモックデータ ---
 const MOCK_MOVIES = [
@@ -51,6 +59,38 @@ export default function App() {
   const [editMyReview, setEditMyReview] = useState('');
   const [isAiLoading, setIsAiLoading] = useState(false);
 
+  // --- DB (Supabase) からのデータ初期取得 ---
+  useEffect(() => {
+    const fetchCollection = async () => {
+      if (!supabase) {
+        console.warn('Supabase credentials not found. Using local state only.');
+        return;
+      }
+      try {
+        // 'user_movies' というテーブルを想定（テーブル名はご自身のSupabaseの設定に合わせて変更してください）
+        const { data, error } = await supabase.from('user_movies').select('*');
+        if (error) throw error;
+        
+        if (data) {
+          const formattedData = data.map(item => ({
+            movieId: item.movie_id,
+            movieData: item.movie_data, // JSONBで保存されている想定
+            status: item.status,
+            score: item.score || 0,
+            aiContent: item.ai_content || '',
+            myReview: item.my_review || '',
+            updatedAt: new Date(item.updated_at).getTime()
+          }));
+          setMyCollection(formattedData);
+        }
+      } catch (err) {
+        console.error('Failed to fetch from Supabase:', err);
+      }
+    };
+    fetchCollection();
+  }, []);
+
+  // --- 検索機能 ---
   useEffect(() => {
     if (!searchQuery.trim()) {
       setSearchResults([]);
@@ -67,6 +107,7 @@ export default function App() {
           id: track.trackId.toString(),
           title: track.trackName,
           genre: track.primaryGenreName,
+          // 画像サイズを大きくして解像度を確保
           posterUrl: track.artworkUrl100 ? track.artworkUrl100.replace('100x100bb', '600x900bb') : '',
           releaseDate: track.releaseDate ? track.releaseDate.substring(0, 10) : '不明',
           apiSynopsis: track.longDescription || 'あらすじ情報がありません。'
@@ -100,42 +141,89 @@ export default function App() {
     setModalMode('review');
   };
 
-  const handleAddWatchlist = (movie: any) => {
-    setMyCollection(prev => [...prev, { 
+  // --- DB保存ロジック ---
+  const saveToSupabase = async (payload: any) => {
+    if (!supabase) return;
+    try {
+      const { error } = await supabase.from('user_movies').upsert({
+        movie_id: payload.movieId,
+        movie_data: payload.movieData,
+        status: payload.status,
+        score: payload.score || null,
+        ai_content: payload.aiContent || null,
+        my_review: payload.myReview || null,
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'movie_id' });
+      
+      if (error) throw error;
+    } catch (err) {
+      console.error('Supabase Upsert Error:', err);
+    }
+  };
+
+  // --- 「みたい！」ボタンの処理 ---
+  const handleAddWatchlist = async (movie: any) => {
+    const newEntry = { 
       movieId: movie.id, 
       movieData: movie,
       status: 'watchlist',
       updatedAt: Date.now()
-    }]);
-    setModalMode(null);
+    };
+    
+    // UIを即座に更新（モーダルは閉じず、ボタンの表示だけ切り替える）
+    setMyCollection(prev => {
+      const filtered = prev.filter(item => item.movieId !== movie.id);
+      return [...filtered, newEntry];
+    });
+
+    // DBへ保存
+    await saveToSupabase(newEntry);
   };
 
-  const handleSaveReview = () => {
+  // --- レビュー保存処理 ---
+  const handleSaveReview = async () => {
     if (!viewingMovie) return;
+    const reviewEntry = {
+      movieId: viewingMovie.id,
+      movieData: viewingMovie,
+      status: 'watched',
+      score: editScore,
+      aiContent: editAiContent,
+      myReview: editMyReview,
+      updatedAt: Date.now()
+    };
+
     setMyCollection(prev => {
       const filtered = prev.filter(item => item.movieId !== viewingMovie.id);
-      return [...filtered, {
-        movieId: viewingMovie.id,
-        movieData: viewingMovie,
-        status: 'watched',
-        score: editScore,
-        aiContent: editAiContent,
-        myReview: editMyReview,
-        updatedAt: Date.now()
-      }];
+      return [...filtered, reviewEntry];
     });
+
+    await saveToSupabase(reviewEntry);
+    
     setModalMode(null);
     setActiveTab('watched');
   };
 
-  const handleGenerateAiPlot = () => {
+  // --- AI展開・結末生成機能 ---
+  const handleGenerateAiPlot = async () => {
     if (!viewingMovie) return;
     setIsAiLoading(true);
+
+    // ※ ここでVercelのエッジファンクションやOpenAI APIを叩く想定です
+    // 例: const response = await fetch('/api/generate', { body: JSON.stringify({ title: viewingMovie.title }) })
+    
     setTimeout(() => {
-      const mockPlot = `【${viewingMovie.title} の展開】\n物語の序盤、主人公は予期せぬトラブルに巻き込まれ、仲間と共に困難な旅に出ます。中盤では最大の挫折を経験し、一度は諦めかけますが、かつての敵が味方になるなど予期せぬ助けを得て立ち直ります。\n\n【結末】\n最終決戦では自己犠牲を伴う決断を迫られますが、知恵と勇気で最悪の事態を回避。黒幕の真の目的が明らかになり、衝撃の事実とともに物語は幕を閉じます。世界は平和を取り戻しますが、主人公の心には静かな変化が訪れていました。`;
-      setEditAiContent(mockPlot);
+      // 映画のタイトルとあらすじを使って、AI風にパーソナライズされたテキストを生成
+      const title = viewingMovie.title;
+      const intro = viewingMovie.apiSynopsis 
+        ? viewingMovie.apiSynopsis.substring(0, 40) + '…という波乱の幕開けから始まる本作。' 
+        : '主人公が予期せぬトラブルに巻き込まれるところから始まる本作。';
+
+      const aiGeneratedMockText = `【『${title}』の展開予測】\n${intro}中盤では最大の挫折を経験し、一度は諦めかけますが、かつての敵が味方になるなど予期せぬ助けを得て立ち直ります。\n\n【結末】\n最終決戦では自己犠牲を伴う決断を迫られますが、知恵と勇気で最悪の事態を回避。『${title}』ならではの衝撃の事実とともに物語は幕を閉じます。世界は平和を取り戻しますが、主人公の心には静かな変化が訪れていました。`;
+      
+      setEditAiContent(aiGeneratedMockText);
       setIsAiLoading(false);
-    }, 1500);
+    }, 2000); // AIが考えている感を出すために少し長めに待機
   };
 
   const renderDetailModal = () => {
@@ -183,15 +271,16 @@ export default function App() {
 
         {/* 下部アクションボタン (固定) */}
         <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-[#141414] via-[#141414]/95 to-transparent pt-12 pb-safe border-t border-zinc-800/50">
+          {/* 修正ポイント: ボタン文言を「みたい！」に変更、クリック時にモーダルを閉じない */}
           {status === 'none' && (
             <button onClick={() => handleAddWatchlist(viewingMovie)} className="w-full py-3.5 bg-white text-black font-bold rounded-md flex justify-center items-center gap-2 hover:bg-zinc-200 active:scale-95 transition-all text-base">
-              <Plus size={22} /> マイリストに追加
+              <Plus size={22} /> みたい！
             </button>
           )}
           
           {status === 'watchlist' && activeTab === 'home' && (
             <button disabled className="w-full py-3.5 bg-zinc-800/80 text-white font-bold rounded-md flex justify-center items-center gap-2 text-base backdrop-blur-sm">
-              <CheckCircle2 size={22} className="text-green-500" /> リスト追加済み
+              <CheckCircle2 size={22} className="text-green-500" /> みたい！リスト追加済み
             </button>
           )}
 
@@ -269,7 +358,7 @@ export default function App() {
               value={editAiContent}
               onChange={(e) => setEditAiContent(e.target.value)}
               placeholder="ここにAIが映画の展開から結末までを生成します。自分で直接書き込むことも可能です。"
-              className="w-full bg-zinc-900/50 border border-purple-900/30 rounded-lg p-4 text-zinc-200 text-sm focus:outline-none focus:border-purple-500/50 min-h-[160px] leading-relaxed resize-none transition"
+              className="w-full bg-zinc-900/50 border border-purple-900/30 rounded-lg p-4 text-zinc-200 text-sm focus:outline-none focus:border-purple-500/50 min-h-[200px] leading-relaxed resize-none transition"
             />
           </div>
 
@@ -295,7 +384,7 @@ export default function App() {
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400" size={18} />
             <input
               type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="映画タイトルで検索..."
+              placeholder="映画タイトルで検索 (例: スパイダーマン)..."
               className="w-full bg-zinc-800/80 border border-zinc-700/50 rounded-md py-3 pl-12 pr-4 text-white text-sm focus:outline-none focus:ring-1 focus:ring-zinc-500 backdrop-blur-md transition-all placeholder:text-zinc-500"
             />
             {searchQuery && (
@@ -314,12 +403,18 @@ export default function App() {
             {searchResults.length > 0 ? (
               <div className="grid grid-cols-3 gap-2">
                 {searchResults.map((movie: any) => (
-                  <div key={movie.id} onClick={() => openDetailModal(movie)} className="cursor-pointer active:scale-95 transition-transform group">
+                  <div key={movie.id} onClick={() => openDetailModal(movie)} className="cursor-pointer active:scale-95 transition-transform group relative">
                     {movie.posterUrl ? (
                       <img src={movie.posterUrl} alt={movie.title} className="w-full aspect-[2/3] object-cover rounded bg-zinc-800 group-hover:opacity-80 transition" />
                     ) : (
                       <div className="w-full aspect-[2/3] bg-zinc-800 rounded flex items-center justify-center p-2 text-center text-[10px] text-zinc-500 border border-zinc-700">
                         {movie.title}
+                      </div>
+                    )}
+                    {/* 検索結果にもアイコンを表示 */}
+                    {getCollectionData(movie.id)?.status && (
+                      <div className="absolute top-1 right-1 bg-black/70 rounded-full p-1 backdrop-blur-md border border-white/10">
+                        {getCollectionData(movie.id)?.status === 'watched' ? <CheckCircle2 size={12} className="text-green-500" /> : <Bookmark size={12} className="text-white" />}
                       </div>
                     )}
                   </div>
@@ -370,7 +465,7 @@ export default function App() {
         collectionData: item
       }));
 
-    const title = statusFilter === 'watched' ? '鑑賞済み' : 'マイリスト';
+    const title = statusFilter === 'watched' ? '鑑賞済み' : 'みたい！リスト';
 
     return (
       <div className="flex-1 overflow-y-auto pb-24 bg-[#141414] px-4 pt-6">
@@ -431,7 +526,7 @@ export default function App() {
           </button>
           <button onClick={() => { setActiveTab('watchlist'); setModalMode(null); }} className={`flex flex-col items-center p-2 transition-colors ${activeTab === 'watchlist' ? 'text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>
             <Bookmark size={22} className={activeTab === 'watchlist' ? 'fill-white' : ''} />
-            <span className="text-[10px] mt-1 font-bold">マイリスト</span>
+            <span className="text-[10px] mt-1 font-bold">みたい！</span>
           </button>
           <button onClick={() => { setActiveTab('watched'); setModalMode(null); }} className={`flex flex-col items-center p-2 transition-colors ${activeTab === 'watched' ? 'text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>
             <CheckCircle2 size={22} className={activeTab === 'watched' ? 'fill-white text-[#141414] stroke-[1.5px]' : ''} />
