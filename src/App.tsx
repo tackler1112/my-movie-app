@@ -3,10 +3,8 @@ import { Star, Plus, ArrowLeft, Wand2, Loader2, Search, Bookmark, CheckCircle2, 
 import { createClient } from '@supabase/supabase-js';
 
 // --- Supabase 初期化 ---
-// Vercel等で設定した環境変数から読み込みます
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
-const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
-// URLとKeyが存在する場合のみクライアントを作成（エラー落ちを防ぐため）
+const supabaseUrl = import.meta.env?.VITE_SUPABASE_URL || '';
+const supabaseKey = import.meta.env?.VITE_SUPABASE_ANON_KEY || '';
 const supabase = supabaseUrl && supabaseKey ? createClient(supabaseUrl, supabaseKey) : null;
 
 // --- 初期表示用のモックデータ ---
@@ -48,7 +46,7 @@ const CATEGORIES = ['おすすめ', '名作アクション', 'アニメ・ゲー
 export default function App() {
   const [activeTab, setActiveTab] = useState('home');
   const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState([]);
+  const [searchResults, setSearchResults] = useState<any[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [myCollection, setMyCollection] = useState<any[]>([]);
   const [modalMode, setModalMode] = useState<string | null>(null); 
@@ -59,22 +57,16 @@ export default function App() {
   const [editMyReview, setEditMyReview] = useState('');
   const [isAiLoading, setIsAiLoading] = useState(false);
 
-  // --- DB (Supabase) からのデータ初期取得 ---
   useEffect(() => {
     const fetchCollection = async () => {
-      if (!supabase) {
-        console.warn('Supabase credentials not found. Using local state only.');
-        return;
-      }
+      if (!supabase) return;
       try {
-        // 'user_movies' というテーブルを想定（テーブル名はご自身のSupabaseの設定に合わせて変更してください）
         const { data, error } = await supabase.from('user_movies').select('*');
         if (error) throw error;
-        
         if (data) {
           const formattedData = data.map(item => ({
             movieId: item.movie_id,
-            movieData: item.movie_data, // JSONBで保存されている想定
+            movieData: item.movie_data,
             status: item.status,
             score: item.score || 0,
             aiContent: item.ai_content || '',
@@ -90,7 +82,7 @@ export default function App() {
     fetchCollection();
   }, []);
 
-  // --- 検索機能 ---
+  // --- 検索機能 (APIエラー時はモックから検索するように修正) ---
   useEffect(() => {
     if (!searchQuery.trim()) {
       setSearchResults([]);
@@ -102,19 +94,25 @@ export default function App() {
     const delayDebounceFn = setTimeout(async () => {
       try {
         const response = await fetch(`https://itunes.apple.com/search?media=movie&term=${encodeURIComponent(searchQuery)}&country=JP&lang=ja_jp&limit=20`);
+        if (!response.ok) throw new Error('API request failed');
+        
         const data = await response.json();
         const mappedResults = data.results.map((track: any) => ({
           id: track.trackId.toString(),
           title: track.trackName,
           genre: track.primaryGenreName,
-          // 画像サイズを大きくして解像度を確保
           posterUrl: track.artworkUrl100 ? track.artworkUrl100.replace('100x100bb', '600x900bb') : '',
           releaseDate: track.releaseDate ? track.releaseDate.substring(0, 10) : '不明',
           apiSynopsis: track.longDescription || 'あらすじ情報がありません。'
         }));
         setSearchResults(mappedResults);
       } catch (error) {
-        console.error("iTunes API Error:", error);
+        console.warn("API Search failed, using local mock data instead:", error);
+        // 通信エラー時などはモックデータの中から名前で部分一致検索する
+        const fallbackResults = MOCK_MOVIES.filter(m => 
+          m.title.toLowerCase().includes(searchQuery.toLowerCase())
+        );
+        setSearchResults(fallbackResults);
       } finally {
         setIsSearching(false);
       }
@@ -141,11 +139,10 @@ export default function App() {
     setModalMode('review');
   };
 
-  // --- DB保存ロジック ---
   const saveToSupabase = async (payload: any) => {
     if (!supabase) return;
     try {
-      const { error } = await supabase.from('user_movies').upsert({
+      await supabase.from('user_movies').upsert({
         movie_id: payload.movieId,
         movie_data: payload.movieData,
         status: payload.status,
@@ -154,14 +151,11 @@ export default function App() {
         my_review: payload.myReview || null,
         updated_at: new Date().toISOString()
       }, { onConflict: 'movie_id' });
-      
-      if (error) throw error;
     } catch (err) {
       console.error('Supabase Upsert Error:', err);
     }
   };
 
-  // --- 「みたい！」ボタンの処理 ---
   const handleAddWatchlist = async (movie: any) => {
     const newEntry = { 
       movieId: movie.id, 
@@ -170,17 +164,14 @@ export default function App() {
       updatedAt: Date.now()
     };
     
-    // UIを即座に更新（モーダルは閉じず、ボタンの表示だけ切り替える）
     setMyCollection(prev => {
       const filtered = prev.filter(item => item.movieId !== movie.id);
       return [...filtered, newEntry];
     });
 
-    // DBへ保存
     await saveToSupabase(newEntry);
   };
 
-  // --- レビュー保存処理 ---
   const handleSaveReview = async () => {
     if (!viewingMovie) return;
     const reviewEntry = {
@@ -204,26 +195,20 @@ export default function App() {
     setActiveTab('watched');
   };
 
-  // --- AI展開・結末生成機能 ---
   const handleGenerateAiPlot = async () => {
     if (!viewingMovie) return;
     setIsAiLoading(true);
-
-    // ※ ここでVercelのエッジファンクションやOpenAI APIを叩く想定です
-    // 例: const response = await fetch('/api/generate', { body: JSON.stringify({ title: viewingMovie.title }) })
-    
     setTimeout(() => {
-      // 映画のタイトルとあらすじを使って、AI風にパーソナライズされたテキストを生成
       const title = viewingMovie.title;
       const intro = viewingMovie.apiSynopsis 
         ? viewingMovie.apiSynopsis.substring(0, 40) + '…という波乱の幕開けから始まる本作。' 
         : '主人公が予期せぬトラブルに巻き込まれるところから始まる本作。';
 
-      const aiGeneratedMockText = `【『${title}』の展開予測】\n${intro}中盤では最大の挫折を経験し、一度は諦めかけますが、かつての敵が味方になるなど予期せぬ助けを得て立ち直ります。\n\n【結末】\n最終決戦では自己犠牲を伴う決断を迫られますが、知恵と勇気で最悪の事態を回避。『${title}』ならではの衝撃の事実とともに物語は幕を閉じます。世界は平和を取り戻しますが、主人公の心には静かな変化が訪れていました。`;
+      const aiGeneratedMockText = `【『${title}』の展開予測】\n${intro}中盤では最大の挫折を経験し、一度は諦めかけますが、かつての敵が味方になるなど予期せぬ助けを得て立ち直ります。\n\n【結末】\n最終決戦では自己犠牲を伴う決断を迫られますが、知恵と勇気で最悪の事態を回避。『${title}』ならではの衝撃の事実とともに物語は幕を閉じます。`;
       
       setEditAiContent(aiGeneratedMockText);
       setIsAiLoading(false);
-    }, 2000); // AIが考えている感を出すために少し長めに待機
+    }, 2000);
   };
 
   const renderDetailModal = () => {
@@ -232,15 +217,14 @@ export default function App() {
     const status = collectionData?.status || 'none';
 
     return (
-      <div className="absolute inset-0 bg-[#141414] z-50 flex flex-col pb-safe animate-in slide-in-from-bottom-10 fade-in duration-300">
-        <header className="flex items-center p-4 bg-gradient-to-b from-black/80 to-transparent absolute top-0 left-0 right-0 z-10">
-          <button onClick={() => setModalMode(null)} className="p-2.5 bg-black/40 backdrop-blur-md text-white rounded-full hover:bg-black/60 transition">
+      <div className="absolute inset-0 bg-[#141414] z-[60] flex flex-col pb-safe animate-in slide-in-from-bottom-10 fade-in duration-300">
+        <header className="flex items-center p-4 bg-gradient-to-b from-black/80 to-transparent absolute top-0 left-0 right-0 z-50">
+          <button onClick={() => setModalMode(null)} className="p-2.5 bg-black/40 backdrop-blur-md text-white rounded-full hover:bg-black/60 transition cursor-pointer relative z-50">
             <ArrowLeft size={20} />
           </button>
         </header>
 
         <div className="flex-1 overflow-y-auto">
-          {/* Netflix風の大型ヒーローヘッダー */}
           <div className="relative w-full aspect-[2/3] max-h-[60vh] bg-zinc-900 flex justify-center overflow-hidden">
             <div className="absolute inset-0 bg-cover bg-center blur-xl opacity-40 scale-110" style={{ backgroundImage: `url(${viewingMovie.posterUrl})` }} />
             {viewingMovie.posterUrl ? (
@@ -251,7 +235,7 @@ export default function App() {
             <div className="absolute bottom-0 left-0 right-0 h-40 bg-gradient-to-t from-[#141414] via-[#141414]/80 to-transparent" />
           </div>
 
-          <div className="px-5 -mt-8 relative z-10 space-y-6 pb-28">
+          <div className="px-5 -mt-8 relative z-10 space-y-6 pb-32">
             <div>
               <h2 className="text-3xl font-extrabold text-white leading-tight mb-3 drop-shadow-lg">{viewingMovie.title}</h2>
               <div className="flex flex-wrap items-center gap-3 text-xs font-semibold text-zinc-300">
@@ -260,7 +244,6 @@ export default function App() {
                 <span className="px-2 py-0.5 bg-zinc-800/80 rounded border border-zinc-700">{viewingMovie.genre}</span>
               </div>
             </div>
-
             <div className="space-y-3">
               <p className="text-sm text-zinc-300 leading-relaxed whitespace-pre-wrap font-medium">
                 {viewingMovie.apiSynopsis}
@@ -269,23 +252,25 @@ export default function App() {
           </div>
         </div>
 
-        {/* 下部アクションボタン (固定) */}
-        <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-[#141414] via-[#141414]/95 to-transparent pt-12 pb-safe border-t border-zinc-800/50">
-          {/* 修正ポイント: ボタン文言を「みたい！」に変更、クリック時にモーダルを閉じない */}
+        {/* 【最重要修正】z-50 を付与してスクロール要素の裏に隠れないようにしました */}
+        <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-[#141414] via-[#141414]/95 to-transparent pt-12 pb-safe border-t border-zinc-800/50 z-50 pointer-events-auto">
+          
           {status === 'none' && (
-            <button onClick={() => handleAddWatchlist(viewingMovie)} className="w-full py-3.5 bg-white text-black font-bold rounded-md flex justify-center items-center gap-2 hover:bg-zinc-200 active:scale-95 transition-all text-base">
+            <button 
+              onClick={() => handleAddWatchlist(viewingMovie)} 
+              className="w-full py-3.5 bg-white text-black font-bold rounded-md flex justify-center items-center gap-2 hover:bg-zinc-200 active:scale-95 transition-all text-base cursor-pointer"
+            >
               <Plus size={22} /> みたい！
             </button>
           )}
           
-          {status === 'watchlist' && activeTab === 'home' && (
-            <button disabled className="w-full py-3.5 bg-zinc-800/80 text-white font-bold rounded-md flex justify-center items-center gap-2 text-base backdrop-blur-sm">
-              <CheckCircle2 size={22} className="text-green-500" /> みたい！リスト追加済み
-            </button>
-          )}
-
-          {status === 'watchlist' && activeTab === 'watchlist' && (
-            <button onClick={() => setModalMode('review')} className="w-full py-3.5 bg-red-600 text-white font-bold rounded-md flex justify-center items-center gap-2 hover:bg-red-700 active:scale-95 transition-all text-base shadow-[0_0_15px_rgba(220,38,38,0.4)]">
+          {status === 'watchlist' && (
+            <button 
+              onClick={() => {
+                if(activeTab === 'watchlist' || activeTab === 'home') setModalMode('review');
+              }} 
+              className="w-full py-3.5 bg-red-600 text-white font-bold rounded-md flex justify-center items-center gap-2 hover:bg-red-700 active:scale-95 transition-all text-base shadow-[0_0_15px_rgba(220,38,38,0.4)] cursor-pointer"
+            >
               <Star size={22} className="fill-white" /> レビューを記録する
             </button>
           )}
@@ -304,13 +289,13 @@ export default function App() {
     if (!viewingMovie) return null;
 
     return (
-      <div className="absolute inset-0 bg-[#141414] z-[60] flex flex-col pb-safe animate-in slide-in-from-bottom-10 fade-in duration-300">
+      <div className="absolute inset-0 bg-[#141414] z-[70] flex flex-col pb-safe animate-in slide-in-from-bottom-10 fade-in duration-300">
         <header className="flex items-center justify-between p-4 bg-[#141414]/90 backdrop-blur-md sticky top-0 z-10 border-b border-zinc-800/50">
-          <button onClick={() => setModalMode(null)} className="p-2 text-zinc-400 hover:text-white transition">
+          <button onClick={() => setModalMode(null)} className="p-2 text-zinc-400 hover:text-white transition cursor-pointer">
             <X size={24} />
           </button>
           <span className="font-bold text-sm text-zinc-100">レビューを記録</span>
-          <button onClick={handleSaveReview} className="text-white font-bold text-sm px-4 py-1.5 bg-red-600 rounded active:scale-95 transition-transform hover:bg-red-700">
+          <button onClick={handleSaveReview} className="text-white font-bold text-sm px-4 py-1.5 bg-red-600 rounded active:scale-95 transition-transform hover:bg-red-700 cursor-pointer">
             保存
           </button>
         </header>
@@ -347,13 +332,12 @@ export default function App() {
               </label>
               <button 
                 onClick={handleGenerateAiPlot} disabled={isAiLoading}
-                className="text-xs px-3 py-1.5 bg-purple-600/20 text-purple-400 rounded-full font-bold flex items-center gap-1 active:scale-95 transition-transform border border-purple-500/30"
+                className="text-xs px-3 py-1.5 bg-purple-600/20 text-purple-400 rounded-full font-bold flex items-center gap-1 active:scale-95 transition-transform border border-purple-500/30 cursor-pointer"
               >
                 {isAiLoading ? <Loader2 size={14} className="animate-spin" /> : <Wand2 size={14} />}
                 {isAiLoading ? '生成中...' : '自動生成'}
               </button>
             </div>
-            <p className="text-[11px] text-zinc-500 mb-2">※AIのハルシネーション対策のため、事実と異なる場合は自由に修正できます。</p>
             <textarea
               value={editAiContent}
               onChange={(e) => setEditAiContent(e.target.value)}
@@ -379,16 +363,16 @@ export default function App() {
   const renderHome = () => {
     return (
       <div className="flex-1 overflow-y-auto pb-24 bg-[#141414]">
-        <div className="sticky top-0 z-20 bg-gradient-to-b from-[#141414] via-[#141414]/90 to-transparent pt-6 pb-6 px-4">
-          <div className="relative shadow-lg">
+        <div className="sticky top-0 z-20 bg-gradient-to-b from-[#141414] via-[#141414]/90 to-transparent pt-6 pb-6 px-4 pointer-events-none">
+          <div className="relative shadow-lg pointer-events-auto">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400" size={18} />
             <input
               type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="映画タイトルで検索 (例: スパイダーマン)..."
+              placeholder="映画タイトルで検索 (例: 呪術廻戦)..."
               className="w-full bg-zinc-800/80 border border-zinc-700/50 rounded-md py-3 pl-12 pr-4 text-white text-sm focus:outline-none focus:ring-1 focus:ring-zinc-500 backdrop-blur-md transition-all placeholder:text-zinc-500"
             />
             {searchQuery && (
-              <button onClick={() => setSearchQuery('')} className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-400 p-1 hover:text-white">
+              <button onClick={() => setSearchQuery('')} className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-400 p-1 hover:text-white cursor-pointer">
                 <X size={18} />
               </button>
             )}
@@ -411,9 +395,8 @@ export default function App() {
                         {movie.title}
                       </div>
                     )}
-                    {/* 検索結果にもアイコンを表示 */}
                     {getCollectionData(movie.id)?.status && (
-                      <div className="absolute top-1 right-1 bg-black/70 rounded-full p-1 backdrop-blur-md border border-white/10">
+                      <div className="absolute top-1 right-1 bg-black/70 rounded-full p-1 backdrop-blur-md border border-white/10 z-10">
                         {getCollectionData(movie.id)?.status === 'watched' ? <CheckCircle2 size={12} className="text-green-500" /> : <Bookmark size={12} className="text-white" />}
                       </div>
                     )}
@@ -439,7 +422,7 @@ export default function App() {
                         <div key={movie.id} onClick={() => openDetailModal(movie)} className="flex-none w-[105px] md:w-[120px] snap-start relative rounded overflow-hidden active:scale-95 transition-transform cursor-pointer group">
                           <img src={movie.posterUrl} alt={movie.title} className="w-full h-full aspect-[2/3] object-cover bg-zinc-800 group-hover:brightness-75 transition-all duration-300" />
                           {status && (
-                            <div className="absolute top-1 right-1 bg-black/70 rounded-full p-1 backdrop-blur-md border border-white/10">
+                            <div className="absolute top-1 right-1 bg-black/70 rounded-full p-1 backdrop-blur-md border border-white/10 z-10">
                               {status === 'watched' ? <CheckCircle2 size={12} className="text-green-500" /> : <Bookmark size={12} className="text-white" />}
                             </div>
                           )}
@@ -492,7 +475,7 @@ export default function App() {
                 )}
                 
                 {statusFilter === 'watched' && movie.collectionData.score > 0 && (
-                  <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black via-black/80 to-transparent p-2 pt-6 flex justify-center">
+                  <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black via-black/80 to-transparent p-2 pt-6 flex justify-center z-10">
                     <div className="flex items-center gap-1 bg-black/60 px-2 py-0.5 rounded-full backdrop-blur-sm border border-white/10">
                       <Star size={10} className="text-red-500 fill-red-500" />
                       <span className="text-xs text-white font-bold">{movie.collectionData.score}</span>
@@ -518,17 +501,16 @@ export default function App() {
         {modalMode === 'detail' && renderDetailModal()}
         {modalMode === 'review' && renderReviewModal()}
 
-        {/* Netflixライクなボトムナビゲーション */}
         <nav className="absolute bottom-0 left-0 right-0 bg-[#141414]/95 backdrop-blur-xl border-t border-zinc-800/60 flex justify-around items-center pb-safe pt-2 px-2 z-40">
-          <button onClick={() => { setActiveTab('home'); setModalMode(null); }} className={`flex flex-col items-center p-2 transition-colors ${activeTab === 'home' ? 'text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>
+          <button onClick={() => { setActiveTab('home'); setModalMode(null); }} className={`flex flex-col items-center p-2 transition-colors cursor-pointer ${activeTab === 'home' ? 'text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>
             <Home size={22} className={activeTab === 'home' ? 'stroke-[2.5px]' : ''} />
             <span className="text-[10px] mt-1 font-bold">ホーム</span>
           </button>
-          <button onClick={() => { setActiveTab('watchlist'); setModalMode(null); }} className={`flex flex-col items-center p-2 transition-colors ${activeTab === 'watchlist' ? 'text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>
+          <button onClick={() => { setActiveTab('watchlist'); setModalMode(null); }} className={`flex flex-col items-center p-2 transition-colors cursor-pointer ${activeTab === 'watchlist' ? 'text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>
             <Bookmark size={22} className={activeTab === 'watchlist' ? 'fill-white' : ''} />
             <span className="text-[10px] mt-1 font-bold">みたい！</span>
           </button>
-          <button onClick={() => { setActiveTab('watched'); setModalMode(null); }} className={`flex flex-col items-center p-2 transition-colors ${activeTab === 'watched' ? 'text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>
+          <button onClick={() => { setActiveTab('watched'); setModalMode(null); }} className={`flex flex-col items-center p-2 transition-colors cursor-pointer ${activeTab === 'watched' ? 'text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>
             <CheckCircle2 size={22} className={activeTab === 'watched' ? 'fill-white text-[#141414] stroke-[1.5px]' : ''} />
             <span className="text-[10px] mt-1 font-bold">鑑賞済み</span>
           </button>
