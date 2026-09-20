@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Star, Plus, ArrowLeft, Wand2, Loader2, Search, Bookmark, CheckCircle2, Home, X, Calendar, Info } from 'lucide-react';
+import { Star, Plus, ArrowLeft, Wand2, Loader2, Search, Bookmark, CheckCircle2, Home, X, Calendar, Edit3 } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
 
 // --- Supabase 初期化 ---
@@ -49,9 +49,11 @@ export default function App() {
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [myCollection, setMyCollection] = useState<any[]>([]);
-  const [modalMode, setModalMode] = useState<string | null>(null); 
+  const [modalMode, setModalMode] = useState<string | null>(null); // 'detail' | 'review'
   const [viewingMovie, setViewingMovie] = useState<any>(null);
+  const [fromTab, setFromTab] = useState<string>('home'); // どこから詳細画面を開いたかを保持
 
+  // 編集フォーム用state
   const [editScore, setEditScore] = useState(50);
   const [editAiContent, setEditAiContent] = useState('');
   const [editMyReview, setEditMyReview] = useState('');
@@ -82,7 +84,7 @@ export default function App() {
     fetchCollection();
   }, []);
 
-  // --- 検索機能 (APIエラー時はモックから検索するように修正) ---
+  // --- 検索機能 ---
   useEffect(() => {
     if (!searchQuery.trim()) {
       setSearchResults([]);
@@ -108,7 +110,6 @@ export default function App() {
         setSearchResults(mappedResults);
       } catch (error) {
         console.warn("API Search failed, using local mock data instead:", error);
-        // 通信エラー時などはモックデータの中から名前で部分一致検索する
         const fallbackResults = MOCK_MOVIES.filter(m => 
           m.title.toLowerCase().includes(searchQuery.toLowerCase())
         );
@@ -125,17 +126,20 @@ export default function App() {
     return myCollection.find(item => item.movieId === movieId);
   }, [myCollection]);
 
-  const openDetailModal = (movie: any) => {
+  // 詳細画面を開く（現在のタブを保持して切り替え）
+  const openDetailModal = (movie: any, originTab: string) => {
     setViewingMovie(movie);
+    setFromTab(originTab);
     setModalMode('detail');
   };
 
+  // レビュー記録画面を開く（映画ごとの既存データを反映、なければ完全にリセット）
   const openReviewModal = (movie: any) => {
     const existing = getCollectionData(movie.id);
     setViewingMovie(movie);
-    setEditScore(existing?.score || 50);
-    setEditAiContent(existing?.aiContent || '');
-    setEditMyReview(existing?.myReview || '');
+    setEditScore(existing?.score ?? 50);
+    setEditAiContent(existing?.aiContent ?? '');
+    setEditMyReview(existing?.myReview ?? '');
     setModalMode('review');
   };
 
@@ -156,6 +160,7 @@ export default function App() {
     }
   };
 
+  // 「みたい！」ボタンを押したときの処理（リストに追加してホームに戻る）
   const handleAddWatchlist = async (movie: any) => {
     const newEntry = { 
       movieId: movie.id, 
@@ -170,6 +175,11 @@ export default function App() {
     });
 
     await saveToSupabase(newEntry);
+    
+    // モーダルを閉じてホーム画面へ戻す
+    setModalMode(null);
+    setActiveTab('home');
+    setSearchQuery(''); // 検索中だった場合はリセット
   };
 
   const handleSaveReview = async () => {
@@ -204,13 +214,14 @@ export default function App() {
         ? viewingMovie.apiSynopsis.substring(0, 40) + '…という波乱の幕開けから始まる本作。' 
         : '主人公が予期せぬトラブルに巻き込まれるところから始まる本作。';
 
-      const aiGeneratedMockText = `【『${title}』の展開予測】\n${intro}中盤では最大の挫折を経験し、一度は諦めかけますが、かつての敵が味方になるなど予期せぬ助けを得て立ち直ります。\n\n【結末】\n最終決戦では自己犠牲を伴う決断を迫られますが、知恵と勇気で最悪の事態を回避。『${title}』ならではの衝撃の事実とともに物語は幕を閉じます。`;
+      const aiGeneratedMockText = `【『${title}』の内容・展開予測】\n${intro}中盤では最大の挫折を経験し、一度は諦めかけますが、かつての敵が味方になるなど予期せぬ助けを得て立ち直ります。\n\n【結末】\n最終決戦では自己犠牲を伴う決断を迫られますが、知恵と勇気で最悪の事態を回避。『${title}』ならではの衝撃の事実とともに物語は幕を閉じます。`;
       
       setEditAiContent(aiGeneratedMockText);
       setIsAiLoading(false);
     }, 2000);
   };
 
+  // --- 詳細モーダル ---
   const renderDetailModal = () => {
     if (!viewingMovie) return null;
     const collectionData = getCollectionData(viewingMovie.id);
@@ -235,7 +246,7 @@ export default function App() {
             <div className="absolute bottom-0 left-0 right-0 h-40 bg-gradient-to-t from-[#141414] via-[#141414]/80 to-transparent" />
           </div>
 
-          <div className="px-5 -mt-8 relative z-10 space-y-6 pb-32">
+          <div className="px-5 -mt-8 relative z-10 space-y-6 pb-36">
             <div>
               <h2 className="text-3xl font-extrabold text-white leading-tight mb-3 drop-shadow-lg">{viewingMovie.title}</h2>
               <div className="flex flex-wrap items-center gap-3 text-xs font-semibold text-zinc-300">
@@ -244,40 +255,90 @@ export default function App() {
                 <span className="px-2 py-0.5 bg-zinc-800/80 rounded border border-zinc-700">{viewingMovie.genre}</span>
               </div>
             </div>
+            
             <div className="space-y-3">
               <p className="text-sm text-zinc-300 leading-relaxed whitespace-pre-wrap font-medium">
                 {viewingMovie.apiSynopsis}
               </p>
             </div>
+
+            {/* 鑑賞済み作品の場合、詳細画面で登録済みの内容・感想を確認できるようにする */}
+            {status === 'watched' && (
+              <div className="space-y-4 pt-4 border-t border-zinc-800">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-red-500 uppercase tracking-wider">鑑賞済みレビュー</span>
+                  <div className="flex items-center gap-1 bg-zinc-900 px-3 py-1 rounded-full border border-zinc-800">
+                    <Star size={14} className="text-red-500 fill-red-500" />
+                    <span className="text-sm font-bold text-white">{collectionData.score} / 100</span>
+                  </div>
+                </div>
+
+                {collectionData.aiContent && (
+                  <div className="bg-zinc-900/60 p-4 rounded-xl border border-zinc-800/80 space-y-2">
+                    <h4 className="text-xs font-bold text-zinc-400">内容</h4>
+                    <p className="text-xs text-zinc-300 whitespace-pre-wrap leading-relaxed">{collectionData.aiContent}</p>
+                  </div>
+                )}
+
+                {collectionData.myReview && (
+                  <div className="bg-zinc-900/60 p-4 rounded-xl border border-zinc-800/80 space-y-2">
+                    <h4 className="text-xs font-bold text-zinc-400">自分の感想</h4>
+                    <p className="text-xs text-zinc-300 whitespace-pre-wrap leading-relaxed">{collectionData.myReview}</p>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
-        {/* 【最重要修正】z-50 を付与してスクロール要素の裏に隠れないようにしました */}
+        {/* --- 下部アクションボタン群 --- */}
         <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-[#141414] via-[#141414]/95 to-transparent pt-12 pb-safe border-t border-zinc-800/50 z-50 pointer-events-auto">
           
-          {status === 'none' && (
-            <button 
-              onClick={() => handleAddWatchlist(viewingMovie)} 
-              className="w-full py-3.5 bg-white text-black font-bold rounded-md flex justify-center items-center gap-2 hover:bg-zinc-200 active:scale-95 transition-all text-base cursor-pointer"
-            >
-              <Plus size={22} /> みたい！
-            </button>
+          {/* ホーム画面から開いた場合：2つのボタンを並べる */}
+          {fromTab === 'home' && (
+            <div className="flex gap-3">
+              {status === 'none' ? (
+                <button 
+                  onClick={() => handleAddWatchlist(viewingMovie)} 
+                  className="flex-1 py-3.5 bg-zinc-800 text-white font-bold rounded-md flex justify-center items-center gap-2 hover:bg-zinc-700 active:scale-95 transition-all text-sm cursor-pointer border border-zinc-700"
+                >
+                  <Plus size={18} /> みたい！
+                </button>
+              ) : (
+                <button 
+                  disabled 
+                  className="flex-1 py-3.5 bg-zinc-900 text-zinc-500 font-bold rounded-md flex justify-center items-center gap-2 text-sm border border-zinc-800 cursor-not-allowed"
+                >
+                  <CheckCircle2 size={18} className="text-green-500" /> 追加済み
+                </button>
+              )}
+
+              <button 
+                onClick={() => openReviewModal(viewingMovie)} 
+                className="flex-1 py-3.5 bg-red-600 text-white font-bold rounded-md flex justify-center items-center gap-2 hover:bg-red-700 active:scale-95 transition-all text-sm shadow-[0_0_15px_rgba(220,38,38,0.4)] cursor-pointer"
+              >
+                <Star size={18} className="fill-white" /> {status === 'watched' ? 'レビューを編集' : 'レビューする'}
+              </button>
+            </div>
           )}
-          
-          {status === 'watchlist' && (
+
+          {/* みたいリストから開いた場合：レビューするボタンのみ */}
+          {fromTab === 'watchlist' && (
             <button 
-              onClick={() => {
-                if(activeTab === 'watchlist' || activeTab === 'home') setModalMode('review');
-              }} 
+              onClick={() => openReviewModal(viewingMovie)} 
               className="w-full py-3.5 bg-red-600 text-white font-bold rounded-md flex justify-center items-center gap-2 hover:bg-red-700 active:scale-95 transition-all text-base shadow-[0_0_15px_rgba(220,38,38,0.4)] cursor-pointer"
             >
               <Star size={22} className="fill-white" /> レビューを記録する
             </button>
           )}
 
-          {status === 'watched' && (
-            <button disabled className="w-full py-3.5 bg-zinc-900 border border-zinc-800 text-white font-bold rounded-md flex justify-center items-center gap-2 text-base">
-              <CheckCircle2 size={22} className="text-green-500" /> 鑑賞済み (スコア: {collectionData.score})
+          {/* 鑑賞済みタブから開いた場合：編集ボタン */}
+          {fromTab === 'watched' && (
+            <button 
+              onClick={() => openReviewModal(viewingMovie)} 
+              className="w-full py-3.5 bg-zinc-800 text-white font-bold rounded-md flex justify-center items-center gap-2 hover:bg-zinc-700 active:scale-95 transition-all text-base cursor-pointer border border-zinc-700"
+            >
+              <Edit3 size={18} /> 編集する
             </button>
           )}
         </div>
@@ -285,14 +346,15 @@ export default function App() {
     );
   };
 
+  // --- レビュー記録・編集モーダル ---
   const renderReviewModal = () => {
     if (!viewingMovie) return null;
 
     return (
       <div className="absolute inset-0 bg-[#141414] z-[70] flex flex-col pb-safe animate-in slide-in-from-bottom-10 fade-in duration-300">
         <header className="flex items-center justify-between p-4 bg-[#141414]/90 backdrop-blur-md sticky top-0 z-10 border-b border-zinc-800/50">
-          <button onClick={() => setModalMode(null)} className="p-2 text-zinc-400 hover:text-white transition cursor-pointer">
-            <X size={24} />
+          <button onClick={() => setModalMode('detail')} className="p-2 text-zinc-400 hover:text-white transition cursor-pointer">
+            <ArrowLeft size={22} />
           </button>
           <span className="font-bold text-sm text-zinc-100">レビューを記録</span>
           <button onClick={handleSaveReview} className="text-white font-bold text-sm px-4 py-1.5 bg-red-600 rounded active:scale-95 transition-transform hover:bg-red-700 cursor-pointer">
@@ -328,7 +390,7 @@ export default function App() {
           <div className="space-y-3">
             <div className="flex justify-between items-end">
               <label className="text-sm font-bold text-purple-400 flex items-center gap-2">
-                <Wand2 size={16} /> AIによる展開・結末
+                <Wand2 size={16} /> 内容
               </label>
               <button 
                 onClick={handleGenerateAiPlot} disabled={isAiLoading}
@@ -341,8 +403,8 @@ export default function App() {
             <textarea
               value={editAiContent}
               onChange={(e) => setEditAiContent(e.target.value)}
-              placeholder="ここにAIが映画の展開から結末までを生成します。自分で直接書き込むことも可能です。"
-              className="w-full bg-zinc-900/50 border border-purple-900/30 rounded-lg p-4 text-zinc-200 text-sm focus:outline-none focus:border-purple-500/50 min-h-[200px] leading-relaxed resize-none transition"
+              placeholder="映画の内容や展開を記録しましょう。自動生成ボタンも使えます。"
+              className="w-full bg-zinc-900/50 border border-purple-900/30 rounded-lg p-4 text-zinc-200 text-sm focus:outline-none focus:border-purple-500/50 min-h-[160px] leading-relaxed resize-none transition"
             />
           </div>
 
@@ -351,7 +413,7 @@ export default function App() {
             <textarea
               value={editMyReview}
               onChange={(e) => setEditMyReview(e.target.value)}
-              placeholder="ネタバレとは分けて、ここには率直な感想や感情を記録しましょう..."
+              placeholder="率直な感想や感情を記録しましょう..."
               className="w-full bg-zinc-900/50 border border-zinc-800 rounded-lg p-4 text-zinc-200 text-sm focus:outline-none focus:border-zinc-500 min-h-[120px] resize-none transition"
             />
           </div>
@@ -387,7 +449,7 @@ export default function App() {
             {searchResults.length > 0 ? (
               <div className="grid grid-cols-3 gap-2">
                 {searchResults.map((movie: any) => (
-                  <div key={movie.id} onClick={() => openDetailModal(movie)} className="cursor-pointer active:scale-95 transition-transform group relative">
+                  <div key={movie.id} onClick={() => openDetailModal(movie, 'home')} className="cursor-pointer active:scale-95 transition-transform group relative">
                     {movie.posterUrl ? (
                       <img src={movie.posterUrl} alt={movie.title} className="w-full aspect-[2/3] object-cover rounded bg-zinc-800 group-hover:opacity-80 transition" />
                     ) : (
@@ -419,7 +481,7 @@ export default function App() {
                     {rowMovies.map(movie => {
                       const status = getCollectionData(movie.id)?.status;
                       return (
-                        <div key={movie.id} onClick={() => openDetailModal(movie)} className="flex-none w-[105px] md:w-[120px] snap-start relative rounded overflow-hidden active:scale-95 transition-transform cursor-pointer group">
+                        <div key={movie.id} onClick={() => openDetailModal(movie, 'home')} className="flex-none w-[105px] md:w-[120px] snap-start relative rounded overflow-hidden active:scale-95 transition-transform cursor-pointer group">
                           <img src={movie.posterUrl} alt={movie.title} className="w-full h-full aspect-[2/3] object-cover bg-zinc-800 group-hover:brightness-75 transition-all duration-300" />
                           {status && (
                             <div className="absolute top-1 right-1 bg-black/70 rounded-full p-1 backdrop-blur-md border border-white/10 z-10">
@@ -463,7 +525,7 @@ export default function App() {
             {list.map((movie: any) => (
               <div 
                 key={movie.id} 
-                onClick={() => statusFilter === 'watched' ? openReviewModal(movie) : openDetailModal(movie)} 
+                onClick={() => openDetailModal(movie, statusFilter)} 
                 className="relative rounded overflow-hidden active:scale-95 transition-transform cursor-pointer group"
               >
                 {movie.posterUrl ? (
@@ -494,12 +556,12 @@ export default function App() {
     <div className="bg-black min-h-screen flex justify-center font-sans selection:bg-red-900/30 text-zinc-200">
       <div className="w-full max-w-md h-[100dvh] bg-[#141414] shadow-2xl overflow-hidden relative border-x border-zinc-900 flex flex-col">
         
+        {modalMode === 'detail' && renderDetailModal()}
+        {modalMode === 'review' && renderReviewModal()}
+
         {!modalMode && activeTab === 'home' && renderHome()}
         {!modalMode && activeTab === 'watchlist' && renderMyList('watchlist')}
         {!modalMode && activeTab === 'watched' && renderMyList('watched')}
-        
-        {modalMode === 'detail' && renderDetailModal()}
-        {modalMode === 'review' && renderReviewModal()}
 
         <nav className="absolute bottom-0 left-0 right-0 bg-[#141414]/95 backdrop-blur-xl border-t border-zinc-800/60 flex justify-around items-center pb-safe pt-2 px-2 z-40">
           <button onClick={() => { setActiveTab('home'); setModalMode(null); }} className={`flex flex-col items-center p-2 transition-colors cursor-pointer ${activeTab === 'home' ? 'text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>
