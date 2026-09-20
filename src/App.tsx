@@ -7,39 +7,24 @@ const supabaseUrl = import.meta.env?.VITE_SUPABASE_URL || '';
 const supabaseKey = import.meta.env?.VITE_SUPABASE_ANON_KEY || '';
 const supabase = supabaseUrl && supabaseKey ? createClient(supabaseUrl, supabaseKey) : null;
 
-// --- 初期表示用のモックデータ ---
-const MOCK_MOVIES = [
-  { 
-    id: 'm1', title: '劇場版 呪術廻戦 0', genre: 'アニメ', category: 'おすすめ', 
-    posterUrl: 'https://image.tmdb.org/t/p/w600_and_h900_bestv2/mktxHLSKIK1aXjJ9UxaA3wT69dO.jpg',
-    releaseDate: '2021-12-24',
-    apiSynopsis: '幼少のころ、幼なじみの祈本里香を交通事故により目の前で失った乙骨憂太。怨霊と化した里香の呪いに苦しみ、自身の死を望む乙骨だったが、最強の呪術師・五条悟によって呪術高専に迎え入れられる。'
-  },
-  { 
-    id: 'm2', title: 'ザ・スーパーマリオブラザーズ・ムービー', genre: 'アニメ・ゲーム', category: 'アニメ・ゲーム', 
-    posterUrl: 'https://image.tmdb.org/t/p/w600_and_h900_bestv2/qNBAXBIQlnOAW9YRcgxotFCVW3U.jpg',
-    releaseDate: '2023-04-28',
-    apiSynopsis: 'ニューヨークで配管工を営む双子の兄弟マリオとルイージ。謎の土管を通じて魔法に満ちた新世界に迷い込んだ二人は、離れ離れになってしまう。マリオは弟を見つけ出すため、壮大な冒険へと旅立つ。'
-  },
-  { 
-    id: 'm3', title: 'ダークナイト', genre: 'アクション', category: '名作アクション', 
-    posterUrl: 'https://image.tmdb.org/t/p/w600_and_h900_bestv2/qJ2tW6WMUDux911r6m7haRef0WH.jpg',
-    releaseDate: '2008-08-09',
-    apiSynopsis: 'ゴッサム・シティーに、究極の悪が舞い降りた。ジョーカーと名乗るその男は、マフィアたちを操り、バットマンを嘲笑うかのように次々と犯罪を繰り返す。バットマンは最強の敵を前に、すべてを賭けた戦いに挑む。'
-  },
-  { 
-    id: 'm4', title: 'インセプション', genre: 'SF', category: '名作アクション', 
-    posterUrl: 'https://image.tmdb.org/t/p/w600_and_h900_bestv2/9gk7adHYeDvHkCSEqAvQNLV5Uge.jpg',
-    releaseDate: '2010-07-23',
-    apiSynopsis: '人が眠っている間にその潜在意識に侵入し、他人のアイデアを盗み出すという犯罪分野のスペシャリストのコブ。彼に課せられたミッションは、他人の頭の中にアイデアを植え付ける「インセプション」だった。'
-  },
-  { 
-    id: 'm5', title: 'ショーシャンクの空に', genre: 'ドラマ', category: '名作ヒューマンドラマ', 
-    posterUrl: 'https://image.tmdb.org/t/p/w600_and_h900_bestv2/q6y0Go1tsGEsmtFryDOJo3dEmqu.jpg',
-    releaseDate: '1995-06-03',
-    apiSynopsis: '妻とその愛人を射殺した罪でショーシャンク刑務所送りとなった銀行員アンディ。初めは戸惑っていたが、やがて彼は自らの信念と希望を失わず、刑務所内の人間関係を静かに変えていく。'
-  }
-];
+// --- APIフォールバック用の初期モックデータ ---
+const FALLBACK_MOVIES: Record<string, any[]> = {
+  'おすすめ': [
+    { id: 'm1', title: '劇場版 呪術廻戦 0', genre: 'アニメ', category: 'おすすめ', posterUrl: 'https://image.tmdb.org/t/p/w600_and_h900_bestv2/mktxHLSKIK1aXjJ9UxaA3wT69dO.jpg', releaseDate: '2021-12-24', apiSynopsis: '幼少のころ、幼なじみの祈本里香を交通事故により目の前で失った乙骨憂太。' },
+    { id: 'm2', title: 'ザ・スーパーマリオブラザーズ・ムービー', genre: 'アニメ', category: 'おすすめ', posterUrl: 'https://image.tmdb.org/t/p/w600_and_h900_bestv2/qNBAXBIQlnOAW9YRcgxotFCVW3U.jpg', releaseDate: '2023-04-28', apiSynopsis: 'ニューヨークで配管工を営む双子の兄弟マリオとルイージ。' }
+  ],
+  '名作アクション': [
+    { id: 'm3', title: 'ダークナイト', genre: 'アクション', category: '名作アクション', posterUrl: 'https://image.tmdb.org/t/p/w600_and_h900_bestv2/qJ2tW6WMUDux911r6m7haRef0WH.jpg', releaseDate: '2008-08-09', apiSynopsis: 'ゴッサム・シティーに、究極の悪が舞い降りた。ジョーカーと名乗る男。' },
+    { id: 'm4', title: 'インセプション', genre: 'SF', category: '名作アクション', posterUrl: 'https://image.tmdb.org/t/p/w600_and_h900_bestv2/9gk7adHYeDvHkCSEqAvQNLV5Uge.jpg', releaseDate: '2010-07-23', apiSynopsis: '人の眠っている間にその潜在意識に侵入し、アイデアを盗み出す。' }
+  ],
+  'アニメ・ゲーム': [
+    { id: 'm1', title: '劇場版 呪術廻戦 0', genre: 'アニメ', category: 'アニメ・ゲーム', posterUrl: 'https://image.tmdb.org/t/p/w600_and_h900_bestv2/mktxHLSKIK1aXjJ9UxaA3wT69dO.jpg', releaseDate: '2021-12-24', apiSynopsis: '幼少のころ、幼なじみの祈本里香を交通事故により目の前で失った乙骨憂太。' },
+    { id: 'm2', title: 'ザ・スーパーマリオブラザーズ・ムービー', genre: 'アニメ', category: 'アニメ・ゲーム', posterUrl: 'https://image.tmdb.org/t/p/w600_and_h900_bestv2/qNBAXBIQlnOAW9YRcgxotFCVW3U.jpg', releaseDate: '2023-04-28', apiSynopsis: 'ニューヨークで配管工を営む双子の兄弟マリオとルイージ。' }
+  ],
+  '名作ヒューマンドラマ': [
+    { id: 'm5', title: 'ショーシャンクの空に', genre: 'ドラマ', category: '名作ヒューマンドラマ', posterUrl: 'https://image.tmdb.org/t/p/w600_and_h900_bestv2/q6y0Go1tsGEsmtFryDOJo3dEmqu.jpg', releaseDate: '1995-06-03', apiSynopsis: '妻とその愛人を射殺した罪でショーシャンク刑務所送りとなった銀行員アンディ。' }
+  ]
+};
 
 const CATEGORIES = ['おすすめ', '名作アクション', 'アニメ・ゲーム', '名作ヒューマンドラマ'];
 
@@ -51,7 +36,11 @@ export default function App() {
   const [myCollection, setMyCollection] = useState<any[]>([]);
   const [modalMode, setModalMode] = useState<string | null>(null); // 'detail' | 'review'
   const [viewingMovie, setViewingMovie] = useState<any>(null);
-  const [fromTab, setFromTab] = useState<string>('home'); // どこから詳細画面を開いたかを保持
+  const [fromTab, setFromTab] = useState<string>('home');
+
+  // ホーム画面用カテゴリ別APIデータ保持state
+  const [homeCategoriesData, setHomeCategoriesData] = useState<Record<string, any[]>>({});
+  const [isHomeLoading, setIsHomeLoading] = useState(true);
 
   // 編集フォーム用state
   const [editScore, setEditScore] = useState(50);
@@ -59,6 +48,7 @@ export default function App() {
   const [editMyReview, setEditMyReview] = useState('');
   const [isAiLoading, setIsAiLoading] = useState(false);
 
+  // Supabase からコレクションデータを取得
   useEffect(() => {
     const fetchCollection = async () => {
       if (!supabase) return;
@@ -84,6 +74,52 @@ export default function App() {
     fetchCollection();
   }, []);
 
+  // --- ホーム画面の映画をAPIから一括取得する処理 ---
+  useEffect(() => {
+    const fetchHomeMovies = async () => {
+      setIsHomeLoading(true);
+      const categoryKeywords: Record<string, string> = {
+        'おすすめ': 'japan',
+        '名作アクション': 'action',
+        'アニメ・ゲーム': 'anime',
+        '名作ヒューマンドラマ': 'drama'
+      };
+
+      const newCategoryData: Record<string, any[]> = {};
+
+      for (const cat of CATEGORIES) {
+        const term = categoryKeywords[cat] || 'movie';
+        try {
+          const res = await fetch(`https://itunes.apple.com/search?media=movie&term=${encodeURIComponent(term)}&country=JP&lang=ja_jp&limit=8`);
+          if (!res.ok) throw new Error('API request failed');
+          const data = await res.json();
+          
+          if (data.results && data.results.length > 0) {
+            newCategoryData[cat] = data.results.map((track: any) => ({
+              id: track.trackId ? track.trackId.toString() : Math.random().toString(),
+              title: track.trackName,
+              genre: track.primaryGenreName || cat,
+              category: cat,
+              posterUrl: track.artworkUrl100 ? track.artworkUrl100.replace('100x100bb', '600x900bb') : '',
+              releaseDate: track.releaseDate ? track.releaseDate.substring(0, 10) : '2023',
+              apiSynopsis: track.longDescription || 'あらすじ情報がありません。'
+            }));
+          } else {
+            newCategoryData[cat] = FALLBACK_MOVIES[cat];
+          }
+        } catch (err) {
+          console.warn(`Failed to fetch category "${cat}" from API, using fallback:`, err);
+          newCategoryData[cat] = FALLBACK_MOVIES[cat];
+        }
+      }
+
+      setHomeCategoriesData(newCategoryData);
+      setIsHomeLoading(false);
+    };
+
+    fetchHomeMovies();
+  }, []);
+
   // --- 検索機能 ---
   useEffect(() => {
     if (!searchQuery.trim()) {
@@ -100,7 +136,7 @@ export default function App() {
         
         const data = await response.json();
         const mappedResults = data.results.map((track: any) => ({
-          id: track.trackId.toString(),
+          id: track.trackId ? track.trackId.toString() : Math.random().toString(),
           title: track.trackName,
           genre: track.primaryGenreName,
           posterUrl: track.artworkUrl100 ? track.artworkUrl100.replace('100x100bb', '600x900bb') : '',
@@ -109,8 +145,9 @@ export default function App() {
         }));
         setSearchResults(mappedResults);
       } catch (error) {
-        console.warn("API Search failed, using local mock data instead:", error);
-        const fallbackResults = MOCK_MOVIES.filter(m => 
+        console.warn("API Search failed, using fallback data instead:", error);
+        const allFallback = Object.values(FALLBACK_MOVIES).flat();
+        const fallbackResults = allFallback.filter(m => 
           m.title.toLowerCase().includes(searchQuery.toLowerCase())
         );
         setSearchResults(fallbackResults);
@@ -126,14 +163,14 @@ export default function App() {
     return myCollection.find(item => item.movieId === movieId);
   }, [myCollection]);
 
-  // 詳細画面を開く（現在のタブを保持して切り替え）
+  // 詳細画面を開く
   const openDetailModal = (movie: any, originTab: string) => {
     setViewingMovie(movie);
     setFromTab(originTab);
     setModalMode('detail');
   };
 
-  // レビュー記録画面を開く（映画ごとの既存データを反映、なければ完全にリセット）
+  // レビュー記録画面を開く（映画ごとの既存データを反映、なければリセット）
   const openReviewModal = (movie: any) => {
     const existing = getCollectionData(movie.id);
     setViewingMovie(movie);
@@ -176,10 +213,9 @@ export default function App() {
 
     await saveToSupabase(newEntry);
     
-    // モーダルを閉じてホーム画面へ戻す
     setModalMode(null);
     setActiveTab('home');
-    setSearchQuery(''); // 検索中だった場合はリセット
+    setSearchQuery('');
   };
 
   const handleSaveReview = async () => {
@@ -210,7 +246,7 @@ export default function App() {
     setIsAiLoading(true);
     setTimeout(() => {
       const title = viewingMovie.title;
-      const intro = viewingMovie.apiSynopsis 
+      const intro = viewingMovie.apiSynopsis && viewingMovie.apiSynopsis !== 'あらすじ情報がありません。'
         ? viewingMovie.apiSynopsis.substring(0, 40) + '…という波乱の幕開けから始まる本作。' 
         : '主人公が予期せぬトラブルに巻き込まれるところから始まる本作。';
 
@@ -262,7 +298,6 @@ export default function App() {
               </p>
             </div>
 
-            {/* 鑑賞済み作品の場合、詳細画面で登録済みの内容・感想を確認できるようにする */}
             {status === 'watched' && (
               <div className="space-y-4 pt-4 border-t border-zinc-800">
                 <div className="flex items-center justify-between">
@@ -293,8 +328,6 @@ export default function App() {
 
         {/* --- 下部アクションボタン群 --- */}
         <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-[#141414] via-[#141414]/95 to-transparent pt-12 pb-safe border-t border-zinc-800/50 z-50 pointer-events-auto">
-          
-          {/* ホーム画面から開いた場合：2つのボタンを並べる */}
           {fromTab === 'home' && (
             <div className="flex gap-3">
               {status === 'none' ? (
@@ -322,7 +355,6 @@ export default function App() {
             </div>
           )}
 
-          {/* みたいリストから開いた場合：レビューするボタンのみ */}
           {fromTab === 'watchlist' && (
             <button 
               onClick={() => openReviewModal(viewingMovie)} 
@@ -332,7 +364,6 @@ export default function App() {
             </button>
           )}
 
-          {/* 鑑賞済みタブから開いた場合：編集ボタン */}
           {fromTab === 'watched' && (
             <button 
               onClick={() => openReviewModal(viewingMovie)} 
@@ -430,7 +461,7 @@ export default function App() {
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400" size={18} />
             <input
               type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="映画タイトルで検索 (例: 呪術廻戦)..."
+              placeholder="映画タイトルで検索 (例: 呪術廻戦, アクション)..."
               className="w-full bg-zinc-800/80 border border-zinc-700/50 rounded-md py-3 pl-12 pr-4 text-white text-sm focus:outline-none focus:ring-1 focus:ring-zinc-500 backdrop-blur-md transition-all placeholder:text-zinc-500"
             />
             {searchQuery && (
@@ -471,30 +502,43 @@ export default function App() {
           </div>
         ) : (
           <div className="space-y-8 pb-8 mt-2">
-            {CATEGORIES.map(category => {
-              const rowMovies = MOCK_MOVIES.filter(m => m.category === category);
-              if (rowMovies.length === 0) return null;
-              return (
-                <div key={category} className="space-y-2">
-                  <h3 className="text-zinc-100 font-bold text-base px-4">{category}</h3>
-                  <div className="flex overflow-x-auto snap-x px-4 gap-2 pb-4 pt-1 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
-                    {rowMovies.map(movie => {
-                      const status = getCollectionData(movie.id)?.status;
-                      return (
-                        <div key={movie.id} onClick={() => openDetailModal(movie, 'home')} className="flex-none w-[105px] md:w-[120px] snap-start relative rounded overflow-hidden active:scale-95 transition-transform cursor-pointer group">
-                          <img src={movie.posterUrl} alt={movie.title} className="w-full h-full aspect-[2/3] object-cover bg-zinc-800 group-hover:brightness-75 transition-all duration-300" />
-                          {status && (
-                            <div className="absolute top-1 right-1 bg-black/70 rounded-full p-1 backdrop-blur-md border border-white/10 z-10">
-                              {status === 'watched' ? <CheckCircle2 size={12} className="text-green-500" /> : <Bookmark size={12} className="text-white" />}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
+            {isHomeLoading ? (
+              <div className="flex flex-col items-center justify-center h-64 gap-3 text-zinc-500">
+                <Loader2 size={32} className="animate-spin text-red-600" />
+                <p className="text-xs font-bold">映画のデータを取得中...</p>
+              </div>
+            ) : (
+              CATEGORIES.map(category => {
+                const rowMovies = homeCategoriesData[category] || FALLBACK_MOVIES[category] || [];
+                if (rowMovies.length === 0) return null;
+                return (
+                  <div key={category} className="space-y-2">
+                    <h3 className="text-zinc-100 font-bold text-base px-4">{category}</h3>
+                    <div className="flex overflow-x-auto snap-x px-4 gap-2 pb-4 pt-1 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+                      {rowMovies.map((movie: any) => {
+                        const status = getCollectionData(movie.id)?.status;
+                        return (
+                          <div key={movie.id} onClick={() => openDetailModal(movie, 'home')} className="flex-none w-[105px] md:w-[120px] snap-start relative rounded overflow-hidden active:scale-95 transition-transform cursor-pointer group">
+                            {movie.posterUrl ? (
+                              <img src={movie.posterUrl} alt={movie.title} className="w-full h-full aspect-[2/3] object-cover bg-zinc-800 group-hover:brightness-75 transition-all duration-300" />
+                            ) : (
+                              <div className="w-full aspect-[2/3] bg-zinc-800 flex items-center justify-center text-center text-[10px] text-zinc-500 p-2">
+                                {movie.title}
+                              </div>
+                            )}
+                            {status && (
+                              <div className="absolute top-1 right-1 bg-black/70 rounded-full p-1 backdrop-blur-md border border-white/10 z-10">
+                                {status === 'watched' ? <CheckCircle2 size={12} className="text-green-500" /> : <Bookmark size={12} className="text-white" />}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })
+            )}
           </div>
         )}
       </div>
