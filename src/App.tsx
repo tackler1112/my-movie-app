@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { Hero } from './components/Hero';
-import { MovieCard } from './components/MovieCard';
-import { getGenres, getTrendingMovies, getNowPlayingMovies, discoverMovies } from './lib/tmdb';
-import { Movie, Genre } from './types';
+import { Hero } from './components/Hero.tsx';
+import { MovieCard } from './components/MovieCard.tsx';
+import { getGenres, getTrendingMovies, getNowPlayingMovies, discoverMovies } from './lib/tmdb.tsx';
+import { Movie, Genre } from './types.ts';
 
 function App() {
   const [genres, setGenres] = useState<Genre[]>([]);
