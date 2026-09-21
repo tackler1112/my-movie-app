@@ -65,7 +65,7 @@ export default function App() {
   const [isHomeLoading, setIsHomeLoading] = useState(true);
   const [genreViewCategory, setGenreViewCategory] = useState<string | null>(null);
 
-  // 検索・絞り込み用
+  // 検索・絞り込み・ソート用
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [searchTitle, setSearchTitle] = useState('');
   const [showFilters, setShowFilters] = useState(false);
@@ -75,6 +75,7 @@ export default function App() {
   const [filterRatingMax, setFilterRatingMax] = useState('10');
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [isSearching, setIsSearching] = useState(false);
+  const [sortOrder, setSortOrder] = useState<string>('default');
 
   // レビュー編集用
   const [editScore, setEditScore] = useState(6.0);
@@ -254,7 +255,7 @@ export default function App() {
       try {
         if (!tmdbApiKey) return;
         
-        // 検索ルーチン修正：APIの正しいエンドポイントを活用し、クライアント側の厳格すぎる一致判定を削除
+        // 検索ルーチン修正：APIの正しいエンドポイントを活用
         let url = `https://api.themoviedb.org/3/discover/movie?api_key=${tmdbApiKey}&language=ja-JP&sort_by=popularity.desc&page=1`;
         if (searchTitle) {
           url = `https://api.themoviedb.org/3/search/movie?api_key=${tmdbApiKey}&language=ja-JP&query=${encodeURIComponent(searchTitle)}&page=1`;
@@ -313,10 +314,12 @@ export default function App() {
     setSearchTitle('');
     setSelectedTags([]);
     setShowFilters(false);
+    setSortOrder('default'); // 検索リセット時にソートも初期化
   };
 
   const handleOpenGenreList = (category: string) => {
     setGenreViewCategory(category);
+    setSortOrder('default'); // 開くときは標準ソート
     setActiveTab('genre_view');
   };
 
@@ -415,6 +418,29 @@ export default function App() {
     }, 1500);
   };
 
+  // --- ソート処理ユーティリティ ---
+  const getSortedMovies = (movies: any[]) => {
+    if (sortOrder === 'default') return movies;
+    return [...movies].sort((a, b) => {
+      if (sortOrder.startsWith('release')) {
+        const dateA = new Date(a.releaseDate === '不明' || !a.releaseDate ? '1900-01-01' : a.releaseDate).getTime();
+        const dateB = new Date(b.releaseDate === '不明' || !b.releaseDate ? '1900-01-01' : b.releaseDate).getTime();
+        return sortOrder === 'release_desc' ? dateB - dateA : dateA - dateB;
+      }
+      if (sortOrder.startsWith('rating')) {
+        const ratingA = parseFloat(a.voteAverage || '0');
+        const ratingB = parseFloat(b.voteAverage || '0');
+        return sortOrder === 'rating_desc' ? ratingB - ratingA : ratingA - ratingB;
+      }
+      if (sortOrder.startsWith('runtime')) {
+        const runA = parseInt(a.runtime || '0');
+        const runB = parseInt(b.runtime || '0');
+        return sortOrder === 'runtime_desc' ? runB - runA : runA - runB;
+      }
+      return 0;
+    });
+  };
+
   // --- ヘッダー共通コンポーネント ---
   const renderHeader = (title: string, showBatchActions: boolean = false) => (
     <header className="sticky top-0 z-40 bg-[#141414]/95 backdrop-blur-md px-4 py-3 flex items-center justify-between border-b border-zinc-800/80">
@@ -438,6 +464,17 @@ export default function App() {
       ) : (
         <div className="text-xs text-zinc-400 font-medium">映画管理アプリ</div>
       )}
+    </header>
+  );
+
+  // --- 共通ヘッダーコンポーネント ---
+  const renderAppHeader = () => (
+    <header className="sticky top-0 z-40 bg-[#141414]/95 backdrop-blur-md px-4 py-3 flex items-center justify-between border-b border-zinc-800/80">
+      <div className="flex items-center gap-2">
+        <Film className="text-red-600" size={20} />
+        <span className="text-white font-black text-xl tracking-tighter">MY CINEMA LOG</span>
+      </div>
+      <div className="text-xs text-zinc-400 font-medium">映画管理アプリ</div>
     </header>
   );
 
@@ -554,6 +591,31 @@ export default function App() {
                           <a key={idx} href={service.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 bg-zinc-800 px-3 py-1.5 rounded-lg text-zinc-200 font-bold border border-zinc-700">
                             {service.logo && <img src={service.logo} alt={service.name} className="w-4 h-4 rounded" />} {service.name}
                           </a>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* タグ表示（ここをタップでホームへ戻りタグ検索） */}
+                  {movieExtraDetails.genres && movieExtraDetails.genres.length > 0 && (
+                    <div className="pt-2">
+                      <span className="text-zinc-500 block mb-2">作品タグ</span>
+                      <div className="flex flex-wrap gap-2 pb-2">
+                        {movieExtraDetails.genres.map((g: any) => (
+                          <button 
+                            key={g.id} 
+                            onClick={() => {
+                              setModalMode(null);
+                              setActiveTab('home');
+                              setSelectedTags([g.id.toString()]);
+                              setSearchTitle('');
+                              setShowFilters(false);
+                              setSortOrder('default');
+                            }} 
+                            className="px-3 py-1 rounded-full text-[11px] font-bold bg-zinc-900 text-zinc-300 border border-zinc-700 hover:text-white cursor-pointer transition-colors"
+                          >
+                            {g.name}
+                          </button>
                         ))}
                       </div>
                     </div>
@@ -729,28 +791,18 @@ export default function App() {
     );
   };
 
-  // --- 共通ヘッダーコンポーネント ---
-  const renderAppHeader = () => (
-    <header className="sticky top-0 z-40 bg-[#141414]/95 backdrop-blur-md px-4 py-3 flex items-center justify-between border-b border-zinc-800/80">
-      <div className="flex items-center gap-2">
-        <Film className="text-red-600" size={20} />
-        <span className="text-white font-black text-xl tracking-tighter">MY CINEMA LOG</span>
-      </div>
-      <div className="text-xs text-zinc-400 font-medium">映画管理アプリ</div>
-    </header>
-  );
-
   // --- ホーム画面 ---
   const renderHome = () => {
     const recommendedList = homeCategoriesData['おすすめ'] || [];
+    const sortedSearchResults = getSortedMovies(searchResults); // ソート適用
 
     return (
       <div className="flex-1 overflow-y-auto pb-24 bg-[#141414]">
         
-        {/* ここを共通ヘッダー呼び出しに変更 */}
+        {/* 共通ヘッダー */}
         {renderAppHeader()}
 
-        {/* 検索・タグエリア (top-[49px] はそのまま) */}
+        {/* 検索・タグエリア */}
         <div className="sticky top-[49px] z-30 bg-[#141414]/95 backdrop-blur-md pt-3 pb-3 px-4 border-b border-zinc-800/50">
           <div className="flex flex-col gap-2.5">
             <div className="flex gap-2 relative">
@@ -772,7 +824,8 @@ export default function App() {
             </div>
 
             <div className="flex overflow-x-auto gap-1.5 py-1 [&::-webkit-scrollbar]:hidden">
-              {Object.entries(GENRES).filter(([k]) => k !== 'おすすめ').map(([name, id]) => {
+              {/* 「おすすめ」と「公開中」を除外 */}
+              {Object.entries(GENRES).filter(([k]) => k !== 'おすすめ' && k !== '公開中').map(([name, id]) => {
                 const isSelected = selectedTags.includes(id);
                 return (
                   <button key={id} onClick={() => toggleTagSelection(id)} className={`px-3 py-1 rounded-full text-[11px] font-bold whitespace-nowrap transition cursor-pointer border ${isSelected ? 'bg-red-600 text-white border-red-500 shadow-md' : 'bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-white'}`}>
@@ -813,11 +866,26 @@ export default function App() {
           <div className="px-4 pt-4">
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-zinc-300 text-xs font-bold flex items-center gap-2">検索結果 {isSearching && <Loader2 size={12} className="animate-spin text-red-500" />}</h3>
-              <button onClick={resetSearch} className="text-[11px] text-zinc-500 hover:text-zinc-300">クリア</button>
+              <div className="flex items-center gap-2">
+                <select
+                  value={sortOrder}
+                  onChange={e => setSortOrder(e.target.value)}
+                  className="bg-zinc-900 border border-zinc-800 text-zinc-300 text-[10px] rounded px-1.5 py-1 focus:outline-none cursor-pointer"
+                >
+                  <option value="default">標準</option>
+                  <option value="release_desc">公開日 (新)</option>
+                  <option value="release_asc">公開日 (古)</option>
+                  <option value="rating_desc">評価 (高)</option>
+                  <option value="rating_asc">評価 (低)</option>
+                  <option value="runtime_desc">時間 (長)</option>
+                  <option value="runtime_asc">時間 (短)</option>
+                </select>
+                <button onClick={resetSearch} className="text-[11px] text-zinc-500 hover:text-zinc-300">クリア</button>
+              </div>
             </div>
-            {searchResults.length > 0 ? (
+            {sortedSearchResults.length > 0 ? (
               <div className="grid grid-cols-3 gap-2">
-                {searchResults.map((movie: any) => (
+                {sortedSearchResults.map((movie: any) => (
                   <div key={movie.id} onClick={() => openDetailModal(movie, 'home')} className="cursor-pointer active:scale-95 transition-transform group relative">
                     {movie.posterUrl ? <img src={movie.posterUrl} className="w-full aspect-[2/3] object-cover rounded-md shadow-md bg-zinc-800 group-hover:brightness-75 transition" /> : <div className="w-full aspect-[2/3] bg-zinc-800 rounded-md shadow-md flex items-center justify-center p-2 text-[10px] text-zinc-500">{movie.title}</div>}
                     {getCollectionData(movie.id)?.status && <div className="absolute top-1 right-1 bg-black/70 rounded-full p-1 backdrop-blur-md border border-white/10 z-10">{getCollectionData(movie.id)?.status === 'watched' ? <CheckCircle2 size={12} className="text-green-500" /> : <Bookmark size={12} className="text-white" />}</div>}
@@ -908,14 +976,31 @@ export default function App() {
   const renderGenreView = () => {
     if (!genreViewCategory) return null;
     const movies = homeCategoriesData[genreViewCategory] || [];
+    const sortedMovies = getSortedMovies(movies); // ソート適用
+
     return (
       <div className="flex-1 overflow-y-auto pb-24 bg-[#141414] animate-in fade-in duration-200">
-        <header className="sticky top-0 bg-[#141414]/90 backdrop-blur-md px-4 py-4 flex items-center gap-3 z-30 border-b border-zinc-800">
-          <button onClick={() => setActiveTab('home')} className="text-zinc-400 hover:text-white p-1 cursor-pointer"><ArrowLeft size={22} /></button>
-          <h2 className="text-lg font-bold text-white">{genreViewCategory}</h2>
+        <header className="sticky top-0 bg-[#141414]/90 backdrop-blur-md px-4 py-4 flex items-center justify-between z-30 border-b border-zinc-800">
+          <div className="flex items-center gap-3">
+            <button onClick={() => { setActiveTab('home'); setSortOrder('default'); }} className="text-zinc-400 hover:text-white p-1 cursor-pointer"><ArrowLeft size={22} /></button>
+            <h2 className="text-lg font-bold text-white">{genreViewCategory}</h2>
+          </div>
+          <select
+            value={sortOrder}
+            onChange={e => setSortOrder(e.target.value)}
+            className="bg-zinc-900 border border-zinc-800 text-zinc-300 text-[10px] rounded px-1.5 py-1 focus:outline-none cursor-pointer"
+          >
+            <option value="default">標準</option>
+            <option value="release_desc">公開日 (新)</option>
+            <option value="release_asc">公開日 (古)</option>
+            <option value="rating_desc">評価 (高)</option>
+            <option value="rating_asc">評価 (低)</option>
+            <option value="runtime_desc">時間 (長)</option>
+            <option value="runtime_asc">時間 (短)</option>
+          </select>
         </header>
         <div className="p-4 grid grid-cols-3 gap-2">
-          {movies.map((movie: any) => {
+          {sortedMovies.map((movie: any) => {
             const status = getCollectionData(movie.id)?.status;
             return (
               <div key={movie.id} onClick={() => openDetailModal(movie, 'genre_view')} className="cursor-pointer active:scale-95 transition-transform group relative">
@@ -930,25 +1015,22 @@ export default function App() {
   };
 
   const renderMyList = (statusFilter: 'watchlist' | 'watched') => {
+    // 修正: map内でスプレッドせず、そのままソートされた配列を利用してエラーを回避
     const list = myCollection
       .filter(item => item.status === statusFilter)
-      .sort((a, b) => b.updatedAt - a.updatedAt)
-      .map(item => ({
-        ...item.movieData,
-        collectionData: item
-      }));
+      .sort((a, b) => b.updatedAt - a.updatedAt);
 
     const title = statusFilter === 'watched' ? '鑑賞済み' : 'みたい！リスト';
 
     return (
       <div className="flex-1 overflow-y-auto pb-24 bg-[#141414]">
         
-        {/* ここを共通ヘッダー呼び出しに変更 */}
+        {/* 共通ヘッダー呼び出し */}
         {renderAppHeader()}
 
-        {/* 一段下：リストのタイトルと一括削除ボタンのエリア (top-[49px] を指定) */}
-        <div className="sticky top-[49px] z-30 bg-[#141414]/95 backdrop-blur-md px-4 py-3 flex items-center justify-between border-b border-zinc-800/50">
-          <h2 className="text-lg font-black text-white tracking-wide">{title}</h2>
+        {/* 修正: ヘッダーUIを控えめ（小さく・薄く）に変更 */}
+        <div className="sticky top-[49px] z-30 bg-[#141414]/95 backdrop-blur-md px-4 py-1.5 flex items-center justify-between border-b border-zinc-800/50">
+          <h2 className="text-sm font-bold text-zinc-500 tracking-wide">{title}</h2>
           <div className="flex items-center gap-3">
             {isSelectionMode ? (
               <>
@@ -961,7 +1043,7 @@ export default function App() {
                 </button>
               </>
             ) : (
-              <button onClick={() => setIsSelectionMode(true)} className="text-zinc-400 hover:text-white transition"><Trash2 size={18}/></button>
+              <button onClick={() => setIsSelectionMode(true)} className="text-zinc-400 hover:text-white transition cursor-pointer"><Trash2 size={18}/></button>
             )}
           </div>
         </div>
@@ -1046,7 +1128,7 @@ export default function App() {
 
         {/* ボトムナビゲーション */}
         <nav className="absolute bottom-0 left-0 right-0 bg-[#141414]/95 backdrop-blur-xl border-t border-zinc-800/80 flex justify-around items-center pb-safe pt-2 px-2 z-40">
-          <button onClick={() => { setActiveTab('home'); setModalMode(null); }} className={`flex flex-col items-center p-2 transition cursor-pointer ${activeTab === 'home' || activeTab === 'genre_view' ? 'text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>
+          <button onClick={() => { setActiveTab('home'); setModalMode(null); resetSearch(); }} className={`flex flex-col items-center p-2 transition cursor-pointer ${activeTab === 'home' || activeTab === 'genre_view' ? 'text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>
             <Home size={20} />
             <span className="text-[10px] mt-1 font-bold">ホーム</span>
           </button>
