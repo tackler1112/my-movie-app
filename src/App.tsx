@@ -176,7 +176,7 @@ export default function App() {
       setHeroIndex(prev => (prev + 1) % Math.min(recommendedList.length, 5));
     }, 5000);
     return () => clearInterval(timer);
-  }, [homeCategoriesData]);
+  }, [homeCategoriesData, heroIndex]);
 
   // 詳細情報取得（関連作品追加）
   useEffect(() => {
@@ -818,7 +818,7 @@ export default function App() {
               <div className="flex flex-col items-center justify-center h-64 gap-3 text-zinc-500"><Loader2 size={32} className="animate-spin text-red-600" /><p className="text-xs font-bold">取得中...</p></div>
             ) : (
               <>
-                {/* おすすめ映画：前回のサイズ (aspect-[16/9]) を維持しつつ、スライド効果を追加 */}
+                {/* おすすめ作品 */}
                 {recommendedList.length > 0 && (
                   <div className="px-4 pt-3">
                     <h3 className="text-zinc-100 font-bold text-sm mb-2">おすすめ作品</h3>
@@ -828,24 +828,28 @@ export default function App() {
                       onTouchStart={e => heroTouchStartX.current = e.touches[0].clientX}
                       onTouchEnd={e => {
                         const diff = e.changedTouches[0].clientX - heroTouchStartX.current;
-                        if (diff > 50) setHeroIndex(prev => (prev - 1 + 5) % recommendedList.length);
-                        if (diff < -50) setHeroIndex(prev => (prev + 1) % recommendedList.length);
+                        const top5Length = Math.min(recommendedList.length, 5); // ←5件で固定
+                        if (diff > 50) setHeroIndex(prev => (prev - 1 + top5Length) % top5Length);
+                        if (diff < -50) setHeroIndex(prev => (prev + 1) % top5Length);
                       }}
                     >
                       <div className="flex w-full h-full transition-transform duration-500 ease-out" style={{ transform: `translateX(-${heroIndex * 100}%)` }}>
-                        {recommendedList.map((movie) => (
+                        {recommendedList.slice(0, 5).map((movie) => ( // ←描画も上位5件のみに絞る
                           <div key={movie.id} className="w-full h-full flex-shrink-0 relative">
                             <img src={movie.backdropUrl || movie.posterUrl} className="w-full h-full object-cover" />
-                            <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent p-4 flex flex-col justify-end">
-                              <h4 className="text-white font-extrabold text-base line-clamp-1">{movie.title}</h4>
+                            <div className="absolute inset-0 bg-gradient-to-t from-[#0a0a0a] via-transparent to-transparent opacity-80" />
+                            <div className="absolute inset-0 bg-gradient-to-t from-[#0a0a0a] via-[#0a0a0a]/20 to-transparent p-4 flex flex-col justify-end">
+                              <h4 className="text-white font-extrabold text-base line-clamp-1 drop-shadow-md">{movie.title}</h4>
                               <p className="text-zinc-300 text-[11px] line-clamp-1 mt-0.5">{movie.apiSynopsis}</p>
                             </div>
                           </div>
                         ))}
                       </div>
-                      <div className="absolute top-3 right-3 flex gap-1 bg-black/50 px-2 py-1 rounded-full backdrop-blur-md z-10">
-                        {recommendedList.map((_, idx) => (
-                          <span key={idx} className={`w-1.5 h-1.5 rounded-full transition-all ${idx === heroIndex ? 'bg-white w-3' : 'bg-white/40'}`} />
+                      
+                      {/* ドットインジケーター：背景を消し、バーを細く控えめに調整 */}
+                      <div className="absolute top-2 right-3 flex gap-1.5 z-10">
+                        {recommendedList.slice(0, 5).map((_, idx) => (
+                          <span key={idx} className={`h-0.5 rounded-full transition-all ${idx === heroIndex ? 'bg-white/80 w-4' : 'bg-white/30 w-1.5'}`} />
                         ))}
                       </div>
                     </div>
