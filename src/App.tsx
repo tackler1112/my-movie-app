@@ -129,7 +129,7 @@ export default function App() {
   useEffect(() => {
     const fetchHomeMovies = async () => {
       setIsHomeLoading(true);
-      const newCategoryData: Record<string, any]> = {};
+      const newCategoryData: Record<string, any[]> = {};
 
       for (const cat of CATEGORIES) {
         let url = `https://api.themoviedb.org/3/movie/popular?api_key=${tmdbApiKey}&language=ja-JP&page=1`;
