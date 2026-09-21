@@ -28,7 +28,6 @@ const GENRES: Record<string, string> = {
 };
 const CATEGORIES = Object.keys(GENRES);
 
-// 5段階の線画顔アイコン
 const FACE_RATINGS = [
   { score: 2, label: 'クソ映画！', icon: Frown, color: '#7f1d1d' },
   { score: 4, label: 'う〜ん...', icon: Annoyed, color: '#9d174d' },
@@ -53,7 +52,7 @@ const FALLBACK_MOVIES: Record<string, any[]> = {
   ]
 };
 
-// 2つの丸で下限と上限を指定できる共通ダブルスライダーコンポーネント
+// 共通ダブルスライダーコンポーネント
 const DualRangeSlider = ({ min, max, step = 1, minVal, maxVal, onChange, unit = "" }: {
   min: number;
   max: number;
@@ -78,15 +77,10 @@ const DualRangeSlider = ({ min, max, step = 1, minVal, maxVal, onChange, unit = 
 
   return (
     <div className="w-full space-y-2">
-      {/* 上部の入力欄（数値直接指定可能） */}
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-1 bg-zinc-800 border border-zinc-700 rounded-lg px-2.5 py-1 flex-1">
           <input
-            type="number"
-            min={min}
-            max={maxVal - step}
-            step={step}
-            value={minVal}
+            type="number" min={min} max={maxVal - step} step={step} value={minVal}
             onChange={(e) => {
               const val = Math.max(min, Math.min(Number(e.target.value), maxVal - step));
               onChange(val, maxVal);
@@ -98,11 +92,7 @@ const DualRangeSlider = ({ min, max, step = 1, minVal, maxVal, onChange, unit = 
         <span className="text-zinc-500 font-bold text-xs">〜</span>
         <div className="flex items-center gap-1 bg-zinc-800 border border-zinc-700 rounded-lg px-2.5 py-1 flex-1">
           <input
-            type="number"
-            min={minVal + step}
-            max={max}
-            step={step}
-            value={maxVal}
+            type="number" min={minVal + step} max={max} step={step} value={maxVal}
             onChange={(e) => {
               const val = Math.min(max, Math.max(Number(e.target.value), minVal + step));
               onChange(minVal, val);
@@ -113,40 +103,19 @@ const DualRangeSlider = ({ min, max, step = 1, minVal, maxVal, onChange, unit = 
         </div>
       </div>
 
-      {/* ダブルハンドル型スライダー軌道 */}
       <div className="relative w-full h-7 flex items-center select-none">
         <div className="absolute w-full h-1.5 bg-zinc-800 rounded-lg" />
-        <div
-          className="absolute h-1.5 bg-red-600 rounded-lg"
-          style={{ left: `${minPercent}%`, width: `${maxPercent - minPercent}%` }}
+        <div className="absolute h-1.5 bg-red-600 rounded-lg" style={{ left: `${minPercent}%`, width: `${maxPercent - minPercent}%` }} />
+        <input
+          type="range" min={min} max={max} step={step} value={minVal} onChange={handleMinChange}
+          className="absolute w-full h-1.5 opacity-0 cursor-pointer z-30 pointer-events-none custom-range-slider"
         />
         <input
-          type="range"
-          min={min}
-          max={max}
-          step={step}
-          value={minVal}
-          onChange={handleMinChange}
-          className="absolute w-full h-1.5 opacity-0 pointer-events-auto cursor-pointer z-30"
+          type="range" min={min} max={max} step={step} value={maxVal} onChange={handleMaxChange}
+          className="absolute w-full h-1.5 opacity-0 cursor-pointer z-30 pointer-events-none custom-range-slider"
         />
-        <input
-          type="range"
-          min={min}
-          max={max}
-          step={step}
-          value={maxVal}
-          onChange={handleMaxChange}
-          className="absolute w-full h-1.5 opacity-0 pointer-events-auto cursor-pointer z-30"
-        />
-        {/* Visual Custom Thumbs */}
-        <div
-          className="absolute w-4 h-4 bg-white border-2 border-red-600 rounded-full -translate-x-1/2 pointer-events-none z-20 shadow-md transition-transform"
-          style={{ left: `${minPercent}%` }}
-        />
-        <div
-          className="absolute w-4 h-4 bg-white border-2 border-red-600 rounded-full -translate-x-1/2 pointer-events-none z-20 shadow-md transition-transform"
-          style={{ left: `${maxPercent}%` }}
-        />
+        <div className="absolute w-4 h-4 bg-white border-2 border-red-600 rounded-full -translate-x-1/2 pointer-events-none z-20 shadow-md transition-transform" style={{ left: `${minPercent}%` }} />
+        <div className="absolute w-4 h-4 bg-white border-2 border-red-600 rounded-full -translate-x-1/2 pointer-events-none z-20 shadow-md transition-transform" style={{ left: `${maxPercent}%` }} />
       </div>
     </div>
   );
@@ -155,24 +124,42 @@ const DualRangeSlider = ({ min, max, step = 1, minVal, maxVal, onChange, unit = 
 export default function App() {
   const [activeTab, setActiveTab] = useState('home');
   const [myCollection, setMyCollection] = useState<any[]>([]);
-  const [modalMode, setModalMode] = useState<string | null>(null);
-  const [viewingMovie, setViewingMovie] = useState<any>(null);
-  const [fromTab, setFromTab] = useState<string>('home');
 
-  // ホーム画面用データ
+  // タブごとのモーダル状態を保持
+  const [tabStates, setTabStates] = useState<Record<string, { modalMode: string | null, viewingMovie: any | null }>>({
+    home: { modalMode: null, viewingMovie: null },
+    genre_view: { modalMode: null, viewingMovie: null },
+    watchlist: { modalMode: null, viewingMovie: null },
+    watched: { modalMode: null, viewingMovie: null },
+  });
+
+  const currentModalMode = tabStates[activeTab]?.modalMode || null;
+  const currentViewingMovie = tabStates[activeTab]?.viewingMovie || null;
+
+  const updateModalState = (mode: string | null, movie: any | null = null) => {
+    setTabStates(prev => ({
+      ...prev,
+      [activeTab]: { modalMode: mode, viewingMovie: movie || prev[activeTab].viewingMovie }
+    }));
+  };
+
+  const [fromTab, setFromTab] = useState<string>('home');
   const [homeCategoriesData, setHomeCategoriesData] = useState<Record<string, any[]>>({});
   const [isHomeLoading, setIsHomeLoading] = useState(true);
   const [genreViewCategory, setGenreViewCategory] = useState<string | null>(null);
-
-  // API動的取得ジャンル一覧
   const [apiGenres, setApiGenres] = useState<{ id: number; name: string }[]>([]);
 
-  // 検索・絞り込み・ソート用
+  // 検索・絞り込み用
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [searchTitle, setSearchTitle] = useState('');
-  const [showFilters, setShowFilters] = useState(false);
   
-  // 要望1: ダブルスライダー用ステート（公開年、上映時間、評価）
+  // フィルター用ステート
+  const [showFilters, setShowFilters] = useState(false);
+  const filterMenuRef = useRef<HTMLDivElement>(null);
+  
+  const [isFilterApplied, setIsFilterApplied] = useState(false);
+  
+  // 本番用フィルター状態
   const [filterYearMin, setFilterYearMin] = useState<number>(1900);
   const [filterYearMax, setFilterYearMax] = useState<number>(THIS_YEAR);
   const [filterRuntimeMin, setFilterRuntimeMin] = useState<number>(0);
@@ -180,10 +167,20 @@ export default function App() {
   const [filterRatingMin, setFilterRatingMin] = useState<number>(0.0);
   const [filterRatingMax, setFilterRatingMax] = useState<number>(10.0);
 
+  // 一時保存用フィルター状態（メニュー表示中のみ）
+  const [tempFilterYearMin, setTempFilterYearMin] = useState<number>(1900);
+  const [tempFilterYearMax, setTempFilterYearMax] = useState<number>(THIS_YEAR);
+  const [tempFilterRuntimeMin, setTempFilterRuntimeMin] = useState<number>(0);
+  const [tempFilterRuntimeMax, setTempFilterRuntimeMax] = useState<number>(300);
+  const [tempFilterRatingMin, setTempFilterRatingMin] = useState<number>(0.0);
+  const [tempFilterRatingMax, setTempFilterRatingMax] = useState<number>(10.0);
+
+  const [enableYearFilter, setEnableYearFilter] = useState(false);
+  const [enableRuntimeFilter, setEnableRuntimeFilter] = useState(false);
+  const [enableRatingFilter, setEnableRatingFilter] = useState(false);
+
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [isSearching, setIsSearching] = useState(false);
-  
-  // 要望3: ソート順（デフォルトを「公開日が新しい順」に設定）
   const [sortOrder, setSortOrder] = useState<string>('release_desc');
 
   // レビュー編集用
@@ -192,23 +189,19 @@ export default function App() {
   const [editMyReview, setEditMyReview] = useState('');
   const [isAiLoading, setIsAiLoading] = useState(false);
 
-  // 詳細画面の拡張データ
+  // 詳細画面拡張データ
   const [movieExtraDetails, setMovieExtraDetails] = useState<any>(null);
   const [relatedMovies, setRelatedMovies] = useState<any[]>([]);
   const [isExtraLoading, setIsExtraLoading] = useState(false);
-
-  // ヒーロースライダー
   const [heroIndex, setHeroIndex] = useState(0);
   const heroTouchStartX = useRef(0);
-
-  // 一括削除用ステート
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [selectedForDeletion, setSelectedForDeletion] = useState<Set<string>>(new Set());
   const [showBatchDeleteConfirm, setShowBatchDeleteConfirm] = useState(false);
 
-  const isSearchActive = searchTitle !== '' || selectedTags.length > 0 || showFilters;
+  const isSearchActive = searchTitle !== '' || selectedTags.length > 0 || isFilterApplied;
 
-  // 要望4: APIから映画ジャンル一覧を動的に取得
+  // ジャンル一覧取得（「履歴」を「歴史」に置換）
   useEffect(() => {
     const fetchApiGenres = async () => {
       if (!tmdbApiKey) return;
@@ -216,21 +209,22 @@ export default function App() {
         const res = await fetch(`https://api.themoviedb.org/3/genre/movie/list?api_key=${tmdbApiKey}&language=ja-JP`);
         const data = await res.json();
         if (data.genres && Array.isArray(data.genres)) {
-          setApiGenres(data.genres);
+          const fixedGenres = data.genres.map((g: any) => ({
+            ...g,
+            name: g.name === '履歴' ? '歴史' : g.name
+          }));
+          setApiGenres(fixedGenres);
         }
-      } catch (err) {
-        console.error('Failed to fetch TMDb genres:', err);
-      }
+      } catch (err) { }
     };
     fetchApiGenres();
   }, []);
 
-  // Supabaseコレクション取得
   useEffect(() => {
     const fetchCollection = async () => {
       if (!supabase) return;
       try {
-        const { data, error } = await supabase.from('user_movies').select('*');
+        const { data } = await supabase.from('user_movies').select('*');
         if (data) {
           setMyCollection(data.map(item => ({
             movieId: item.movie_id,
@@ -251,24 +245,16 @@ export default function App() {
     const fetchHomeMovies = async () => {
       setIsHomeLoading(true);
       const newCategoryData: Record<string, any[]> = {};
-
       for (const cat of CATEGORIES) {
         let url = `https://api.themoviedb.org/3/movie/popular?api_key=${tmdbApiKey}&language=ja-JP&page=1`;
-        if (cat === '公開中') {
-          url = `https://api.themoviedb.org/3/movie/now_playing?api_key=${tmdbApiKey}&language=ja-JP&region=JP&page=1`;
-        } else if (GENRES[cat]) {
-          url = `https://api.themoviedb.org/3/discover/movie?api_key=${tmdbApiKey}&language=ja-JP&with_genres=${GENRES[cat]}&sort_by=popularity.desc&page=1`;
-        }
-
+        if (cat === '公開中') url = `https://api.themoviedb.org/3/movie/now_playing?api_key=${tmdbApiKey}&language=ja-JP&region=JP&page=1`;
+        else if (GENRES[cat]) url = `https://api.themoviedb.org/3/discover/movie?api_key=${tmdbApiKey}&language=ja-JP&with_genres=${GENRES[cat]}&sort_by=popularity.desc&page=1`;
         try {
-          if (!tmdbApiKey) throw new Error('API Key missing');
           const res = await fetch(url);
           const data = await res.json();
-
           if (data.results && data.results.length > 0) {
             let results = data.results;
             if (cat !== '公開中') results = results.sort(() => Math.random() - 0.5);
-            
             newCategoryData[cat] = results.map((movie: any) => ({
               id: movie.id.toString(),
               title: movie.title || movie.original_title,
@@ -294,7 +280,6 @@ export default function App() {
     fetchHomeMovies();
   }, []);
 
-  // おすすめバナーの自動スライド
   useEffect(() => {
     const recommendedList = homeCategoriesData['おすすめ'] || [];
     if (recommendedList.length === 0) return;
@@ -306,14 +291,14 @@ export default function App() {
 
   useEffect(() => {
     const fetchMovieDetails = async () => {
-      if (!viewingMovie || !tmdbApiKey) return;
+      if (!currentViewingMovie || !tmdbApiKey) return;
       setIsExtraLoading(true);
       try {
         const [detailRes, creditsRes, watchRes, recommendationsRes] = await Promise.all([
-          fetch(`https://api.themoviedb.org/3/movie/${viewingMovie.id}?api_key=${tmdbApiKey}&language=ja-JP`),
-          fetch(`https://api.themoviedb.org/3/movie/${viewingMovie.id}/credits?api_key=${tmdbApiKey}&language=ja-JP`),
-          fetch(`https://api.themoviedb.org/3/movie/${viewingMovie.id}/watch/providers?api_key=${tmdbApiKey}`),
-          fetch(`https://api.themoviedb.org/3/movie/${viewingMovie.id}/recommendations?api_key=${tmdbApiKey}&language=ja-JP&page=1`)
+          fetch(`https://api.themoviedb.org/3/movie/${currentViewingMovie.id}?api_key=${tmdbApiKey}&language=ja-JP`),
+          fetch(`https://api.themoviedb.org/3/movie/${currentViewingMovie.id}/credits?api_key=${tmdbApiKey}&language=ja-JP`),
+          fetch(`https://api.themoviedb.org/3/movie/${currentViewingMovie.id}/watch/providers?api_key=${tmdbApiKey}`),
+          fetch(`https://api.themoviedb.org/3/movie/${currentViewingMovie.id}/recommendations?api_key=${tmdbApiKey}&language=ja-JP&page=1`)
         ]);
 
         const detail = await detailRes.json();
@@ -334,15 +319,7 @@ export default function App() {
           url: watch.results?.JP?.link || 'https://www.themoviedb.org/'
         }));
 
-        setMovieExtraDetails({
-          runtime,
-          runtimeMinutes,
-          director,
-          cast,
-          productionCompanies,
-          streamingServices,
-          genres: detail.genres || []
-        });
+        setMovieExtraDetails({ runtime, runtimeMinutes, director, cast, productionCompanies, streamingServices, genres: detail.genres || [] });
 
         if (recommendations.results) {
           setRelatedMovies(recommendations.results.slice(0, 10).map((rm: any) => ({
@@ -354,22 +331,32 @@ export default function App() {
             voteAverage: rm.vote_average ? rm.vote_average.toFixed(1) : '0.0'
           })));
         }
-
-      } catch (err) {
-        console.error(err);
-      } finally {
+      } catch (err) {} finally {
         setIsExtraLoading(false);
       }
     };
 
-    if (modalMode === 'detail') {
+    if (currentModalMode === 'detail') {
       setMovieExtraDetails(null);
       setRelatedMovies([]);
       fetchMovieDetails();
     }
-  }, [viewingMovie, modalMode]);
+  }, [currentViewingMovie, currentModalMode]);
 
-  // 検索と詳細絞り込み（公開年、上映時間、評価のダブルスライダー条件適用）
+  // メニュー外タップでフィルターを閉じる
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (showFilters && filterMenuRef.current && !filterMenuRef.current.contains(e.target as Node)) {
+        const target = e.target as HTMLElement;
+        if (!target.closest('.filter-toggle-btn')) {
+          setShowFilters(false);
+        }
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showFilters]);
+
   useEffect(() => {
     if (!isSearchActive) {
       setSearchResults([]);
@@ -380,14 +367,12 @@ export default function App() {
     const delayDebounceFn = setTimeout(async () => {
       try {
         if (!tmdbApiKey) return;
-        
         let url = `https://api.themoviedb.org/3/discover/movie?api_key=${tmdbApiKey}&language=ja-JP&sort_by=popularity.desc&page=1`;
         
-        // TMDb Discover API パラメータへの絞り込み付加
-        url += `&primary_release_date.gte=${filterYearMin}-01-01&primary_release_date.lte=${filterYearMax}-12-31`;
-        url += `&vote_average.gte=${filterRatingMin}&vote_average.lte=${filterRatingMax}`;
-        if (filterRuntimeMin > 0) url += `&with_runtime.gte=${filterRuntimeMin}`;
-        if (filterRuntimeMax < 300) url += `&with_runtime.lte=${filterRuntimeMax}`;
+        if (enableYearFilter) url += `&primary_release_date.gte=${filterYearMin}-01-01&primary_release_date.lte=${filterYearMax}-12-31`;
+        if (enableRatingFilter) url += `&vote_average.gte=${filterRatingMin}&vote_average.lte=${filterRatingMax}`;
+        if (enableRuntimeFilter && filterRuntimeMin > 0) url += `&with_runtime.gte=${filterRuntimeMin}`;
+        if (enableRuntimeFilter && filterRuntimeMax < 300) url += `&with_runtime.lte=${filterRuntimeMax}`;
 
         if (searchTitle) {
           url = `https://api.themoviedb.org/3/search/movie?api_key=${tmdbApiKey}&language=ja-JP&query=${encodeURIComponent(searchTitle)}&page=1`;
@@ -399,13 +384,13 @@ export default function App() {
         const data = await res.json();
         let results = data.results || [];
 
-        // クライアント側での最終精度調整（公開年・評価）
         const filtered = results.filter((movie: any) => {
           const releaseYear = parseInt(movie.release_date?.substring(0, 4) || '0');
           const vote = movie.vote_average || 0;
-          const yearMatch = releaseYear >= filterYearMin && releaseYear <= filterYearMax;
-          const ratingMatch = vote >= filterRatingMin && vote <= filterRatingMax;
-          return yearMatch && ratingMatch;
+          let keep = true;
+          if (enableYearFilter) keep = keep && (releaseYear >= filterYearMin && releaseYear <= filterYearMax);
+          if (enableRatingFilter) keep = keep && (vote >= filterRatingMin && vote <= filterRatingMax);
+          return keep;
         });
 
         const mapped = filtered.map((movie: any) => ({
@@ -416,17 +401,13 @@ export default function App() {
           apiSynopsis: movie.overview || 'あらすじ情報がありません。',
           voteAverage: movie.vote_average ? movie.vote_average.toFixed(1) : '0.0'
         }));
-
         setSearchResults(mapped);
-      } catch (err) {
-        console.error(err);
-      } finally {
+      } catch (err) {} finally {
         setIsSearching(false);
       }
     }, 400);
-
     return () => clearTimeout(delayDebounceFn);
-  }, [searchTitle, selectedTags, filterYearMin, filterYearMax, filterRuntimeMin, filterRuntimeMax, filterRatingMin, filterRatingMax, isSearchActive]);
+  }, [searchTitle, selectedTags, filterYearMin, filterYearMax, filterRuntimeMin, filterRuntimeMax, filterRatingMin, filterRatingMax, isFilterApplied, enableYearFilter, enableRuntimeFilter, enableRatingFilter]);
 
   const getCollectionData = useCallback((movieId: string) => {
     return myCollection.find(item => item.movieId === movieId);
@@ -439,7 +420,7 @@ export default function App() {
   const handleKeywordSearch = (keyword: string) => {
     setSearchTitle(keyword);
     setActiveTab('home');
-    setModalMode(null);
+    updateModalState(null);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -447,13 +428,11 @@ export default function App() {
     setSearchTitle('');
     setSelectedTags([]);
     setShowFilters(false);
+    setIsFilterApplied(false);
+    setEnableYearFilter(false);
+    setEnableRuntimeFilter(false);
+    setEnableRatingFilter(false);
     setSortOrder('release_desc');
-    setFilterYearMin(1900);
-    setFilterYearMax(THIS_YEAR);
-    setFilterRuntimeMin(0);
-    setFilterRuntimeMax(300);
-    setFilterRatingMin(0.0);
-    setFilterRatingMax(10.0);
   };
 
   const handleOpenGenreList = (category: string) => {
@@ -463,19 +442,17 @@ export default function App() {
   };
 
   const openDetailModal = (movie: any, originTab: string) => {
-    setViewingMovie(movie);
     setFromTab(originTab);
-    setModalMode('detail');
+    updateModalState('detail', movie);
   };
 
   const openReviewModal = (movie: any) => {
     const existing = getCollectionData(movie.id);
-    setViewingMovie(movie);
     const initScore = existing?.score !== undefined && existing?.score !== null && existing?.score > 0 ? existing.score : 6.0;
     setEditScore(initScore);
     setEditAiContent(existing?.aiContent ?? '');
     setEditMyReview(existing?.myReview ?? '');
-    setModalMode('review');
+    updateModalState('review', movie);
   };
 
   const saveToSupabase = async (payload: any) => {
@@ -496,7 +473,7 @@ export default function App() {
   const handleDeleteFromCollection = async (movieId: string) => {
     setMyCollection(prev => prev.filter(item => item.movieId !== movieId));
     if (supabase) await supabase.from('user_movies').delete().eq('movie_id', movieId);
-    setModalMode(null);
+    updateModalState(null);
   };
 
   const handleBatchDelete = async () => {
@@ -508,11 +485,14 @@ export default function App() {
     setShowBatchDeleteConfirm(false);
   };
 
+  // チラつき防止のため閉じてから状態更新
   const handleAddWatchlist = async (movie: any) => {
-    const newEntry = { movieId: movie.id, movieData: movie, status: 'watchlist', updatedAt: Date.now() };
-    setMyCollection(prev => [...prev.filter(item => item.movieId !== movie.id), newEntry]);
-    await saveToSupabase(newEntry);
-    setModalMode(null);
+    updateModalState(null);
+    setTimeout(async () => {
+      const newEntry = { movieId: movie.id, movieData: movie, status: 'watchlist', updatedAt: Date.now() };
+      setMyCollection(prev => [...prev.filter(item => item.movieId !== movie.id), newEntry]);
+      await saveToSupabase(newEntry);
+    }, 300);
   };
 
   const handleQuickWatch = async (movie: any) => {
@@ -531,33 +511,32 @@ export default function App() {
   };
 
   const handleSaveReview = async () => {
-    if (!viewingMovie) return;
+    if (!currentViewingMovie) return;
     const reviewEntry = {
-      movieId: viewingMovie.id,
-      movieData: viewingMovie,
+      movieId: currentViewingMovie.id,
+      movieData: currentViewingMovie,
       status: 'watched',
       score: Number(editScore.toFixed(1)),
       aiContent: editAiContent,
       myReview: editMyReview,
       updatedAt: Date.now()
     };
-    setMyCollection(prev => [...prev.filter(item => item.movieId !== viewingMovie.id), reviewEntry]);
+    setMyCollection(prev => [...prev.filter(item => item.movieId !== currentViewingMovie.id), reviewEntry]);
     await saveToSupabase(reviewEntry);
-    setModalMode(null);
+    updateModalState(null);
   };
 
   const handleGenerateAiPlot = async () => {
-    if (!viewingMovie) return;
+    if (!currentViewingMovie) return;
     setIsAiLoading(true);
     setTimeout(() => {
-      const title = viewingMovie.title;
+      const title = currentViewingMovie.title;
       const aiText = `【『${title}』の内容・展開】\n予測不可能なプロットが展開され、登場人物たちの葛藤が鮮やかに描かれます。\n\n【結末・考察】\nラストの感動的なカタルシスは必見のクオリティです。`;
       setEditAiContent(aiText);
       setIsAiLoading(false);
     }, 1500);
   };
 
-  // 要望3: 並び替え順序の正確な実装（1.公開日新, 2.公開日古, 3.時間長, 4.時間短, 5.評価高, 6.評価低）
   const getSortedMovies = (movies: any[]) => {
     return [...movies].sort((a, b) => {
       if (sortOrder === 'release_desc') {
@@ -594,10 +573,25 @@ export default function App() {
     });
   };
 
-  // 要望5: 全画面共通のアプリタイトルヘッダー
+  const handleTabClick = (targetTab: string) => {
+    if (activeTab === targetTab) {
+      if (targetTab === 'home') resetSearch();
+      setTabStates(prev => ({ ...prev, [targetTab]: { modalMode: null, viewingMovie: null } }));
+      setIsSelectionMode(false);
+    } else {
+      setActiveTab(targetTab);
+    }
+  };
+
+  const handleAppTitleClick = () => {
+    setActiveTab('home');
+    setTabStates(prev => ({ ...prev, home: { modalMode: null, viewingMovie: null } }));
+    resetSearch();
+  };
+
   const renderAppHeader = () => (
     <header className="sticky top-0 z-40 bg-[#141414]/95 backdrop-blur-md px-4 py-3 flex items-center justify-between border-b border-zinc-800/80">
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 cursor-pointer" onClick={handleAppTitleClick}>
         <Film className="text-red-600" size={20} />
         <span className="text-white font-black text-xl tracking-tighter">MY CINEMA LOG</span>
       </div>
@@ -605,64 +599,53 @@ export default function App() {
     </header>
   );
 
-  // モーダル: 詳細
   const renderDetailModal = () => {
-    if (!viewingMovie) return null;
-    const collectionData = getCollectionData(viewingMovie.id);
+    if (!currentViewingMovie) return null;
+    const collectionData = getCollectionData(currentViewingMovie.id);
     const status = collectionData?.status || 'none';
     const currentScore = collectionData?.score || 0;
     const face = getFaceRating(currentScore);
-
     const canDelete = status !== 'none' && (fromTab === 'watchlist' || fromTab === 'watched');
 
     return (
-      <div className="absolute inset-0 bg-[#141414] z-[60] flex flex-col pb-safe animate-in slide-in-from-bottom-10 fade-in duration-300 overflow-y-auto">
-        {/* 要望5: 作品詳細画面にもアプリタイトルが表示された共通ヘッダーを表示 */}
+      <div className="absolute inset-0 bg-[#141414] z-[60] flex flex-col animate-in slide-in-from-bottom-10 fade-in duration-300">
         {renderAppHeader()}
-
-        <header className="flex items-center justify-between p-4 bg-gradient-to-b from-black/80 to-transparent absolute top-[49px] left-0 right-0 z-50">
-          <button onClick={() => setModalMode(null)} className="p-2.5 bg-black/60 backdrop-blur-md text-white rounded-full hover:bg-black/80 transition cursor-pointer">
+        <header className="flex items-center justify-between p-4 bg-gradient-to-b from-black/80 to-transparent absolute top-[49px] left-0 right-0 z-50 pointer-events-none">
+          <button onClick={() => updateModalState(null)} className="pointer-events-auto p-2.5 bg-black/60 backdrop-blur-md text-white rounded-full hover:bg-black/80 transition cursor-pointer">
             <ArrowLeft size={20} />
           </button>
           {canDelete && (
-            <button onClick={() => setModalMode('delete_confirm')} className="p-2.5 bg-red-600/80 backdrop-blur-md text-white rounded-full hover:bg-red-700 transition cursor-pointer">
+            <button onClick={() => updateModalState('delete_confirm')} className="pointer-events-auto p-2.5 bg-red-600/80 backdrop-blur-md text-white rounded-full hover:bg-red-700 transition cursor-pointer">
               <Trash2 size={18} />
             </button>
           )}
         </header>
 
-        {modalMode === 'delete_confirm' && (
+        {currentModalMode === 'delete_confirm' && (
           <div className="absolute inset-0 bg-black/80 backdrop-blur-md z-[80] flex items-center justify-center p-6">
             <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl max-w-xs w-full text-center space-y-4 shadow-2xl">
               <h3 className="text-lg font-bold text-white">リストから削除しますか？</h3>
-              <p className="text-xs text-zinc-400">この操作は元に戻すことができません。</p>
               <div className="flex gap-3 pt-2">
-                <button onClick={() => setModalMode('detail')} className="flex-1 py-2.5 bg-zinc-800 text-white rounded-lg text-xs font-bold">いいえ</button>
-                <button onClick={() => handleDeleteFromCollection(viewingMovie.id)} className="flex-1 py-2.5 bg-red-600 text-white rounded-lg text-xs font-bold">はい</button>
+                <button onClick={() => updateModalState('detail')} className="flex-1 py-2.5 bg-zinc-800 text-white rounded-lg text-xs font-bold">いいえ</button>
+                <button onClick={() => handleDeleteFromCollection(currentViewingMovie.id)} className="flex-1 py-2.5 bg-red-600 text-white rounded-lg text-xs font-bold">はい</button>
               </div>
             </div>
           </div>
         )}
 
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto pb-28">
           <div className="relative w-full aspect-[2/3] max-h-[50vh] bg-zinc-900 flex justify-center overflow-hidden">
-            <div className="absolute inset-0 bg-cover bg-center blur-xl opacity-40 scale-110" style={{ backgroundImage: `url(${viewingMovie.posterUrl})` }} />
-            {viewingMovie.posterUrl ? (
-              <img src={viewingMovie.posterUrl} alt="" className="relative h-full w-full object-cover shadow-2xl" />
-            ) : (
-              <div className="relative h-full flex items-center justify-center text-zinc-600">No Image</div>
-            )}
+            <div className="absolute inset-0 bg-cover bg-center blur-xl opacity-40 scale-110" style={{ backgroundImage: `url(${currentViewingMovie.posterUrl})` }} />
+            {currentViewingMovie.posterUrl ? <img src={currentViewingMovie.posterUrl} className="relative h-full w-full object-cover shadow-2xl" /> : <div className="relative h-full flex items-center justify-center text-zinc-600">No Image</div>}
             <div className="absolute bottom-0 left-0 right-0 h-40 bg-gradient-to-t from-[#141414] via-[#141414]/80 to-transparent" />
           </div>
 
-          <div className="px-5 -mt-6 relative z-10 space-y-6 pb-36">
+          <div className="px-5 -mt-6 relative z-10 space-y-6">
             <div>
-              <h2 className="text-2xl font-extrabold text-white leading-tight mb-2">{viewingMovie.title}</h2>
+              <h2 className="text-2xl font-extrabold text-white leading-tight mb-2">{currentViewingMovie.title}</h2>
               <div className="flex flex-wrap items-center gap-2 text-xs font-medium text-zinc-300">
-                <span className="flex items-center gap-1 text-yellow-500 font-bold bg-yellow-500/10 px-2 py-0.5 rounded border border-yellow-500/20">
-                  <Star size={12} className="fill-yellow-500" /> {viewingMovie.voteAverage}
-                </span>
-                <span className="flex items-center gap-1 bg-zinc-800 px-2 py-0.5 rounded text-zinc-300"><Calendar size={12} /> {viewingMovie.releaseDate}</span>
+                <span className="flex items-center gap-1 text-yellow-500 font-bold bg-yellow-500/10 px-2 py-0.5 rounded border border-yellow-500/20"><Star size={12} className="fill-yellow-500" /> {currentViewingMovie.voteAverage}</span>
+                <span className="flex items-center gap-1 bg-zinc-800 px-2 py-0.5 rounded text-zinc-300"><Calendar size={12} /> {currentViewingMovie.releaseDate}</span>
                 {movieExtraDetails?.runtime && <span className="bg-zinc-800 px-2 py-0.5 rounded text-zinc-300"><Clock size={12} className="inline mr-1" />{movieExtraDetails.runtime}</span>}
               </div>
             </div>
@@ -672,14 +655,12 @@ export default function App() {
                 <face.icon size={36} color={face.color} strokeWidth={1.2} />
                 <div>
                   <div className="text-xs font-bold uppercase tracking-wider" style={{ color: face.color }}>{face.label}</div>
-                  <div className="text-lg font-extrabold text-white">{currentScore.toFixed(1)}<span className="text-xs text-zinc-500 font-normal"> /10.0</span></div>
+                  <div className="text-lg font-extrabold text-white">{currentScore.toFixed(1)}<span className="text-xs text-zinc-500"> /10.0</span></div>
                 </div>
               </div>
             )}
 
-            <div className="space-y-2">
-              <p className="text-xs text-zinc-300 leading-relaxed font-medium">{viewingMovie.apiSynopsis}</p>
-            </div>
+            <p className="text-xs text-zinc-300 leading-relaxed font-medium">{currentViewingMovie.apiSynopsis}</p>
 
             <div className="space-y-4 pt-4 border-t border-zinc-800/80 text-xs">
               {isExtraLoading ? (
@@ -694,63 +675,29 @@ export default function App() {
                     <div>
                       <span className="text-zinc-500 block mb-1">キャスト</span>
                       <div className="flex flex-col items-start gap-1">
-                        {movieExtraDetails.cast.map((c: string) => (
-                          <button key={c} onClick={() => handleKeywordSearch(c)} className="text-zinc-200 font-bold line-clamp-1 hover:underline text-left">{c}</button>
-                        ))}
+                        {movieExtraDetails.cast.map((c: string) => <button key={c} onClick={() => handleKeywordSearch(c)} className="text-zinc-200 font-bold line-clamp-1 hover:underline text-left">{c}</button>)}
                       </div>
                     </div>
                   </div>
 
-                  {movieExtraDetails.productionCompanies.length > 0 && (
-                    <div className="bg-zinc-900/50 p-3 rounded-lg border border-zinc-800">
-                      <span className="text-zinc-500 block mb-1">制作会社</span>
-                      <div className="flex flex-wrap gap-2">
-                        {movieExtraDetails.productionCompanies.map((c: string) => (
-                          <button key={c} onClick={() => handleKeywordSearch(c)} className="text-zinc-200 font-medium hover:underline">{c}</button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {movieExtraDetails.streamingServices.length > 0 && (
-                    <div>
-                      <span className="text-zinc-500 block mb-1">配信サービス</span>
-                      <div className="flex flex-wrap gap-2">
-                        {movieExtraDetails.streamingServices.map((service: any, idx: number) => (
-                          <a key={idx} href={service.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 bg-zinc-800 px-3 py-1.5 rounded-lg text-zinc-200 font-bold border border-zinc-700">
-                            {service.logo && <img src={service.logo} alt={service.name} className="w-4 h-4 rounded" />} {service.name}
-                          </a>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* 要望4: タグをタップした際、ホームへ遷移し該当のAPIタグが押された状態にする */}
                   {movieExtraDetails.genres && movieExtraDetails.genres.length > 0 && (
                     <div className="pt-2">
                       <span className="text-zinc-500 block mb-2">作品タグ</span>
                       <div className="flex flex-wrap gap-2 pb-2">
                         {movieExtraDetails.genres.map((g: any) => (
-                          <button 
-                            key={g.id} 
-                            onClick={() => {
-                              setModalMode(null);
-                              setActiveTab('home');
-                              setSelectedTags([g.id.toString()]);
-                              setSearchTitle('');
-                              setShowFilters(false);
-                              setSortOrder('release_desc');
-                            }} 
-                            className="px-3 py-1 rounded-full text-[11px] font-bold bg-zinc-900 text-zinc-300 border border-zinc-700 hover:text-white cursor-pointer transition-colors"
-                          >
-                            {g.name}
-                          </button>
+                          <button key={g.id} onClick={() => {
+                            updateModalState(null);
+                            setActiveTab('home');
+                            setSelectedTags([g.id.toString()]);
+                            setSearchTitle('');
+                            setShowFilters(false);
+                            setSortOrder('release_desc');
+                          }} className="px-3 py-1 rounded-full text-[11px] font-bold bg-zinc-900 text-zinc-300 border border-zinc-700 hover:text-white cursor-pointer transition-colors">{g.name}</button>
                         ))}
                       </div>
                     </div>
                   )}
 
-                  {/* 関連作品 */}
                   {relatedMovies.length > 0 && (
                     <div className="pt-2">
                       <span className="text-zinc-500 block mb-2">関連作品</span>
@@ -789,35 +736,24 @@ export default function App() {
         <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-[#141414] via-[#141414]/95 to-transparent pt-12 pb-safe border-t border-zinc-800/50 z-50 pointer-events-auto">
           {status === 'none' && (
             <div className="flex gap-3">
-              <button onClick={() => handleAddWatchlist(viewingMovie)} className="flex-1 py-3.5 bg-zinc-800 text-white font-bold rounded-lg flex justify-center items-center gap-2 hover:bg-zinc-700 active:scale-95 transition-all text-sm border border-zinc-700">
+              <button onClick={() => handleAddWatchlist(currentViewingMovie)} className="flex-1 py-3.5 bg-zinc-800 text-white font-bold rounded-lg flex justify-center items-center gap-2 hover:bg-zinc-700 active:scale-95 transition-all text-sm border border-zinc-700">
                 <Plus size={18} /> みたい！
               </button>
-              <button 
-                onClick={() => openReviewModal(viewingMovie)} 
-                className="flex-1 py-3.5 bg-red-600 text-white font-bold rounded-lg flex justify-center items-center gap-2 hover:bg-red-700 active:scale-95 transition-all text-sm shadow-[0_0_15px_rgba(220,38,38,0.4)] cursor-pointer"
-              >
+              <button onClick={() => openReviewModal(currentViewingMovie)} className="flex-1 py-3.5 bg-red-600 text-white font-bold rounded-lg flex justify-center items-center gap-2 hover:bg-red-700 active:scale-95 transition-all text-sm shadow-[0_0_15px_rgba(220,38,38,0.4)] cursor-pointer">
                 <Edit3 size={18} /> レビューする
               </button>
             </div>
           )}
-
           {status === 'watchlist' && (
             <div className="flex gap-3">
-              <button 
-                onClick={async () => { await handleQuickWatch(viewingMovie); setActiveTab('watched'); setModalMode(null); }} 
-                className="flex-1 py-3.5 bg-zinc-800 text-white font-bold rounded-lg flex justify-center items-center gap-2 hover:bg-zinc-700 transition text-sm border border-zinc-700 cursor-pointer"
-              >
-                <CheckCircle2 size={18} className="text-green-500" /> みた！にする
-              </button>
-              <button onClick={() => openReviewModal(viewingMovie)} className="flex-1 py-3.5 bg-red-600 text-white font-bold rounded-lg flex justify-center items-center gap-2 hover:bg-red-700 transition text-sm shadow-lg cursor-pointer">
-                <Star size={18} className="fill-white" /> レビューを書く
+              <button onClick={async () => await handleQuickWatch(currentViewingMovie)} className="flex-1 py-3.5 bg-red-600 text-white font-bold rounded-lg flex justify-center items-center gap-2 hover:bg-red-700 transition text-sm shadow-[0_0_15px_rgba(220,38,38,0.4)] cursor-pointer">
+                <CheckCircle2 size={18} /> みた！
               </button>
             </div>
           )}
-
           {status === 'watched' && (
-            <button onClick={() => openReviewModal(viewingMovie)} className="w-full py-3.5 bg-red-600 text-white font-bold rounded-lg flex justify-center items-center gap-2 hover:bg-red-700 active:scale-95 transition-all text-base shadow-[0_0_15px_rgba(220,38,38,0.4)] cursor-pointer">
-              <Edit3 size={18} /> レビューを編集する
+            <button onClick={() => openReviewModal(currentViewingMovie)} className="w-full py-3.5 bg-red-600 text-white font-bold rounded-lg flex justify-center items-center gap-2 hover:bg-red-700 active:scale-95 transition-all text-base shadow-[0_0_15px_rgba(220,38,38,0.4)] cursor-pointer">
+              <Edit3 size={18} /> レビューする
             </button>
           )}
         </div>
@@ -825,15 +761,14 @@ export default function App() {
     );
   };
 
-  // モーダル: レビュー
   const renderReviewModal = () => {
-    if (!viewingMovie) return null;
+    if (!currentViewingMovie) return null;
     const currentFace = getFaceRating(editScore);
 
     return (
       <div className="absolute inset-0 bg-[#141414] z-[70] flex flex-col pb-safe animate-in slide-in-from-bottom-10 fade-in duration-300">
         <header className="flex items-center justify-between p-4 bg-[#141414]/90 backdrop-blur-md sticky top-0 z-10 border-b border-zinc-800">
-          <button onClick={() => setModalMode('detail')} className="p-2 text-zinc-400 hover:text-white transition cursor-pointer">
+          <button onClick={() => updateModalState('detail')} className="p-2 text-zinc-400 hover:text-white transition cursor-pointer">
             <ArrowLeft size={22} />
           </button>
           <span className="font-bold text-sm text-zinc-100">レビューを記録</span>
@@ -842,43 +777,29 @@ export default function App() {
           </button>
         </header>
 
-        <div className="flex-1 overflow-y-auto p-5 space-y-6 pb-32">
+        <div className="flex-1 overflow-y-auto p-5 space-y-6 pb-28">
           <div className="flex gap-4 items-center bg-zinc-900/50 p-3 rounded-xl border border-zinc-800">
-            {viewingMovie.posterUrl ? (
-              <img src={viewingMovie.posterUrl} alt="" className="w-14 h-20 object-cover rounded shadow-md bg-zinc-800" />
-            ) : (
-              <div className="w-14 h-20 bg-zinc-800 rounded shadow-md"></div>
-            )}
+            {currentViewingMovie.posterUrl ? <img src={currentViewingMovie.posterUrl} className="w-14 h-20 object-cover rounded shadow-md bg-zinc-800" /> : <div className="w-14 h-20 bg-zinc-800 rounded shadow-md" />}
             <div className="flex-1">
-              <h2 className="text-base font-bold text-white leading-tight line-clamp-2">{viewingMovie.title}</h2>
-              <p className="text-xs text-zinc-400 mt-1">{viewingMovie.releaseDate}</p>
+              <h2 className="text-base font-bold text-white leading-tight line-clamp-2">{currentViewingMovie.title}</h2>
+              <p className="text-xs text-zinc-400 mt-1">{currentViewingMovie.releaseDate}</p>
             </div>
           </div>
 
           <div className="space-y-4 bg-zinc-900/60 p-4 rounded-xl border border-zinc-800">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <currentFace.icon size={40} color={currentFace.color} strokeWidth={1.2} />
-                <div>
-                  <span className="text-xs font-bold uppercase tracking-wider" style={{ color: currentFace.color }}>{currentFace.label}</span>
-                  <div className="text-2xl font-black text-white">{editScore.toFixed(1)}<span className="text-xs text-zinc-500"> /10.0</span></div>
-                </div>
+            <div className="flex items-center gap-3">
+              <currentFace.icon size={40} color={currentFace.color} strokeWidth={1.2} />
+              <div>
+                <span className="text-xs font-bold uppercase tracking-wider" style={{ color: currentFace.color }}>{currentFace.label}</span>
+                <div className="text-2xl font-black text-white">{editScore.toFixed(1)}<span className="text-xs text-zinc-500"> /10.0</span></div>
               </div>
             </div>
-            <input
-              type="range" min="0" max="10" step="0.1" value={editScore}
-              onChange={(e) => setEditScore(Number(e.target.value))}
-              className="w-full accent-red-600 h-2 bg-zinc-800 rounded-lg appearance-none cursor-pointer"
-            />
-            
+            <input type="range" min="0" max="10" step="0.1" value={editScore} onChange={(e) => setEditScore(Number(e.target.value))} className="w-full accent-red-600 h-2 bg-zinc-800 rounded-lg appearance-none cursor-pointer" />
             <div className="grid grid-cols-5 gap-1 pt-1">
               {FACE_RATINGS.map((f) => {
                 const isSelected = Math.abs(editScore - f.score) < 1.0;
                 return (
-                  <button
-                    key={f.score} onClick={() => setEditScore(f.score)}
-                    className={`flex flex-col items-center justify-center p-2 rounded-lg transition cursor-pointer border ${isSelected ? 'bg-zinc-800 border-zinc-600' : 'border-transparent hover:bg-zinc-800/50'}`}
-                  >
+                  <button key={f.score} onClick={() => setEditScore(f.score)} className={`flex flex-col items-center justify-center p-2 rounded-lg transition cursor-pointer border ${isSelected ? 'bg-zinc-800 border-zinc-600' : 'border-transparent hover:bg-zinc-800/50'}`}>
                     <f.icon size={26} color={f.color} strokeWidth={1.2} />
                     {isSelected && <span className="text-[9px] mt-1 font-bold" style={{ color: f.color }}>{f.label}</span>}
                   </button>
@@ -891,46 +812,36 @@ export default function App() {
             <div className="flex justify-between items-end">
               <label className="text-sm font-bold text-purple-400 flex items-center gap-2"><Wand2 size={16} /> 内容</label>
               <button onClick={handleGenerateAiPlot} disabled={isAiLoading} className="text-xs px-3 py-1.5 bg-purple-600/20 text-purple-400 rounded-full font-bold flex items-center gap-1 active:scale-95 transition border border-purple-500/30 cursor-pointer">
-                {isAiLoading ? <Loader2 size={14} className="animate-spin" /> : <Wand2 size={14} />} {isAiLoading ? '生成中...' : '自動生成'}
+                {isAiLoading ? <Loader2 size={14} className="animate-spin" /> : <Wand2 size={14} />} 自動生成
               </button>
             </div>
-            <textarea
-              value={editAiContent} onChange={(e) => setEditAiContent(e.target.value)}
-              placeholder="映画の内容や展開を記録..."
-              className="w-full bg-zinc-900 border border-purple-900/30 rounded-xl p-4 text-zinc-200 text-sm focus:outline-none min-h-[130px] leading-relaxed resize-none transition"
-            />
+            <textarea value={editAiContent} onChange={(e) => setEditAiContent(e.target.value)} placeholder="映画の内容や展開を記録..." className="w-full bg-zinc-900 border border-purple-900/30 rounded-xl p-4 text-zinc-200 text-sm focus:outline-none min-h-[130px] resize-none transition" />
           </div>
 
           <div className="space-y-3">
             <label className="text-sm font-bold text-white">自分の感想</label>
-            <textarea
-              value={editMyReview} onChange={(e) => setEditMyReview(e.target.value)}
-              placeholder="率直な感想を記録..."
-              className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-4 text-zinc-200 text-sm focus:outline-none focus:border-zinc-500 min-h-[100px] resize-none transition"
-            />
-            <button onClick={handleSaveReview} className="w-full py-3.5 bg-red-600 text-white font-bold rounded-xl shadow-lg hover:bg-red-700 active:scale-95 transition cursor-pointer mt-2">
-              保存する
-            </button>
+            <textarea value={editMyReview} onChange={(e) => setEditMyReview(e.target.value)} placeholder="率直な感想を記録..." className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-4 text-zinc-200 text-sm focus:outline-none focus:border-zinc-500 min-h-[100px] resize-none transition" />
+            <button onClick={handleSaveReview} className="w-full py-3.5 bg-red-600 text-white font-bold rounded-xl shadow-lg hover:bg-red-700 active:scale-95 transition mt-2">保存する</button>
           </div>
         </div>
       </div>
     );
   };
 
-  // ホーム画面
   const renderHome = () => {
     const recommendedList = homeCategoriesData['おすすめ'] || [];
     const sortedSearchResults = getSortedMovies(searchResults);
+    
+    // タグ表示用
+    const unselectedGenres = apiGenres.filter(g => !selectedTags.includes(g.id.toString()));
+    const selectedGenreObjs = apiGenres.filter(g => selectedTags.includes(g.id.toString()));
 
     return (
       <div className="flex-1 overflow-y-auto pb-24 bg-[#141414]">
-        
-        {/* 共通ヘッダー */}
         {renderAppHeader()}
 
-        {/* 検索・タグエリア */}
         <div className="sticky top-[49px] z-30 bg-[#141414]/95 backdrop-blur-md pt-3 pb-3 px-4 border-b border-zinc-800/50">
-          <div className="flex flex-col gap-2.5">
+          <div className="flex flex-col gap-2.5 relative">
             <div className="flex gap-2 relative">
               <div className="relative flex-1">
                 <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400" size={16} />
@@ -939,105 +850,98 @@ export default function App() {
                   placeholder="映画を検索..."
                   className="w-full bg-zinc-900 border border-zinc-800 rounded-lg py-2.5 pl-10 pr-8 text-white text-xs focus:outline-none focus:border-red-500 transition-all placeholder:text-zinc-500"
                 />
-                {searchTitle && <button onClick={() => setSearchTitle('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 cursor-pointer"><X size={16} /></button>}
+                {searchTitle && <button onClick={() => setSearchTitle('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400"><X size={16} /></button>}
               </div>
               <button 
-                onClick={() => setShowFilters(!showFilters)} 
-                className={`w-10 h-10 rounded-full border flex items-center justify-center transition cursor-pointer shrink-0 ${showFilters ? 'bg-red-600 border-red-500 text-white' : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white'}`}
+                onClick={() => {
+                  if (!showFilters) {
+                    setTempFilterYearMin(filterYearMin); setTempFilterYearMax(filterYearMax);
+                    setTempFilterRuntimeMin(filterRuntimeMin); setTempFilterRuntimeMax(filterRuntimeMax);
+                    setTempFilterRatingMin(filterRatingMin); setTempFilterRatingMax(filterRatingMax);
+                    setShowFilters(true);
+                  } else {
+                    setShowFilters(false);
+                  }
+                }} 
+                className={`filter-toggle-btn w-10 h-10 rounded-full border flex items-center justify-center transition shrink-0 ${isFilterApplied ? 'bg-red-600 border-red-500 text-white' : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white'}`}
               >
                 <SlidersHorizontal size={16} />
               </button>
             </div>
 
-            {/* 要望4: APIで取得してきた存在するすべてのジャンルタグを表示 */}
+            {/* 選択済みタグ（別段で赤く表示） */}
+            {selectedGenreObjs.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 pt-1">
+                {selectedGenreObjs.map(g => (
+                  <button key={g.id} onClick={() => toggleTagSelection(g.id.toString())} className="px-2.5 py-1 rounded-full text-[11px] font-bold whitespace-nowrap transition cursor-pointer bg-red-600 text-white border border-red-500 shadow-md flex items-center gap-1">
+                    {g.name} <X size={12} />
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* 未選択タグ */}
             <div className="flex overflow-x-auto gap-1.5 py-1 [&::-webkit-scrollbar]:hidden">
-              {apiGenres.length > 0 ? (
-                apiGenres.map((g) => {
-                  const genreIdStr = g.id.toString();
-                  const isSelected = selectedTags.includes(genreIdStr);
-                  return (
-                    <button 
-                      key={g.id} 
-                      onClick={() => toggleTagSelection(genreIdStr)} 
-                      className={`px-3 py-1 rounded-full text-[11px] font-bold whitespace-nowrap transition cursor-pointer border ${isSelected ? 'bg-red-600 text-white border-red-500 shadow-md' : 'bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-white'}`}
-                    >
-                      {g.name}
-                    </button>
-                  );
-                })
-              ) : (
-                // API取得中のフォールバック
-                Object.entries(GENRES).filter(([k]) => k !== 'おすすめ' && k !== '公開中').map(([name, id]) => {
-                  const isSelected = selectedTags.includes(id);
-                  return (
-                    <button key={id} onClick={() => toggleTagSelection(id)} className={`px-3 py-1 rounded-full text-[11px] font-bold whitespace-nowrap transition cursor-pointer border ${isSelected ? 'bg-red-600 text-white border-red-500 shadow-md' : 'bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-white'}`}>
-                      {name}
-                    </button>
-                  );
-                })
-              )}
+              {unselectedGenres.map((g) => (
+                <button key={g.id} onClick={() => toggleTagSelection(g.id.toString())} className="px-3 py-1 rounded-full text-[11px] font-bold whitespace-nowrap transition cursor-pointer border bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-white">
+                  {g.name}
+                </button>
+              ))}
             </div>
 
-            {/* 要望1: 公開年・上映時間・評価のすべてに丸2つのダブルスライダーと数値入力欄を設定 */}
+            {/* フィルターメニュー */}
             {showFilters && (
-              <div className="bg-zinc-900 p-4 rounded-xl border border-zinc-800 space-y-4 animate-in fade-in">
-                {/* 公開年スライダー */}
-                <div className="space-y-1">
-                  <div className="flex justify-between items-center text-xs font-bold text-zinc-300">
-                    <label>公開年</label>
-                    <span className="text-[10px] text-zinc-400">{filterYearMin}年 〜 {filterYearMax}年</span>
-                  </div>
-                  <DualRangeSlider
-                    min={1900}
-                    max={THIS_YEAR}
-                    step={1}
-                    minVal={filterYearMin}
-                    maxVal={filterYearMax}
-                    onChange={(minV, maxV) => {
-                      setFilterYearMin(minV);
-                      setFilterYearMax(maxV);
-                    }}
-                    unit="年"
-                  />
+              <div ref={filterMenuRef} className="absolute top-full right-0 left-0 mt-2 bg-zinc-900 p-4 rounded-xl border border-zinc-700 shadow-2xl z-50 animate-in fade-in">
+                <div className="flex items-center justify-between mb-4 border-b border-zinc-800 pb-2">
+                  <h4 className="text-sm font-bold text-white">フィルター設定</h4>
                 </div>
-
-                {/* 上映時間スライダー（新規追加：公開年と評価の間） */}
-                <div className="space-y-1 pt-2 border-t border-zinc-800">
-                  <div className="flex justify-between items-center text-xs font-bold text-zinc-300">
-                    <label>上映時間</label>
-                    <span className="text-[10px] text-zinc-400">{filterRuntimeMin}分 〜 {filterRuntimeMax}分</span>
+                
+                <div className="space-y-5">
+                  <div className="space-y-2">
+                    <label className="flex items-center gap-2 text-xs font-bold text-zinc-300 cursor-pointer">
+                      <input type="checkbox" checked={enableYearFilter} onChange={e => setEnableYearFilter(e.target.checked)} className="accent-red-600 w-3.5 h-3.5" />
+                      公開年
+                    </label>
+                    {enableYearFilter && (
+                      <DualRangeSlider min={1900} max={THIS_YEAR} step={1} minVal={tempFilterYearMin} maxVal={tempFilterYearMax} onChange={(minV, maxV) => { setTempFilterYearMin(minV); setTempFilterYearMax(maxV); }} unit="年" />
+                    )}
                   </div>
-                  <DualRangeSlider
-                    min={0}
-                    max={300}
-                    step={5}
-                    minVal={filterRuntimeMin}
-                    maxVal={filterRuntimeMax}
-                    onChange={(minV, maxV) => {
-                      setFilterRuntimeMin(minV);
-                      setFilterRuntimeMax(maxV);
-                    }}
-                    unit="分"
-                  />
+                  
+                  <div className="space-y-2 pt-2 border-t border-zinc-800/50">
+                    <label className="flex items-center gap-2 text-xs font-bold text-zinc-300 cursor-pointer">
+                      <input type="checkbox" checked={enableRuntimeFilter} onChange={e => setEnableRuntimeFilter(e.target.checked)} className="accent-red-600 w-3.5 h-3.5" />
+                      上映時間
+                    </label>
+                    {enableRuntimeFilter && (
+                      <DualRangeSlider min={0} max={300} step={5} minVal={tempFilterRuntimeMin} maxVal={tempFilterRuntimeMax} onChange={(minV, maxV) => { setTempFilterRuntimeMin(minV); setTempFilterRuntimeMax(maxV); }} unit="分" />
+                    )}
+                  </div>
+                  
+                  <div className="space-y-2 pt-2 border-t border-zinc-800/50">
+                    <label className="flex items-center gap-2 text-xs font-bold text-zinc-300 cursor-pointer">
+                      <input type="checkbox" checked={enableRatingFilter} onChange={e => setEnableRatingFilter(e.target.checked)} className="accent-red-600 w-3.5 h-3.5" />
+                      評価
+                    </label>
+                    {enableRatingFilter && (
+                      <DualRangeSlider min={0.0} max={10.0} step={0.1} minVal={tempFilterRatingMin} maxVal={tempFilterRatingMax} onChange={(minV, maxV) => { setTempFilterRatingMin(minV); setTempFilterRatingMax(maxV); }} />
+                    )}
+                  </div>
                 </div>
-
-                {/* 評価スライダー */}
-                <div className="space-y-1 pt-2 border-t border-zinc-800">
-                  <div className="flex justify-between items-center text-xs font-bold text-zinc-300">
-                    <label>評価</label>
-                    <span className="text-[10px] text-zinc-400">{filterRatingMin.toFixed(1)} 〜 {filterRatingMax.toFixed(1)}</span>
-                  </div>
-                  <DualRangeSlider
-                    min={0.0}
-                    max={10.0}
-                    step={0.1}
-                    minVal={filterRatingMin}
-                    maxVal={filterRatingMax}
-                    onChange={(minV, maxV) => {
-                      setFilterRatingMin(minV);
-                      setFilterRatingMax(maxV);
-                    }}
-                  />
+                
+                <div className="flex gap-3 mt-6 pt-4 border-t border-zinc-800">
+                  <button onClick={() => {
+                    setEnableYearFilter(false); setEnableRuntimeFilter(false); setEnableRatingFilter(false);
+                    setTempFilterYearMin(1900); setTempFilterYearMax(THIS_YEAR);
+                    setTempFilterRuntimeMin(0); setTempFilterRuntimeMax(300);
+                    setTempFilterRatingMin(0.0); setTempFilterRatingMax(10.0);
+                  }} className="flex-1 py-2.5 bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg text-xs font-bold transition">クリア</button>
+                  <button onClick={() => {
+                    setFilterYearMin(tempFilterYearMin); setFilterYearMax(tempFilterYearMax);
+                    setFilterRuntimeMin(tempFilterRuntimeMin); setFilterRuntimeMax(tempFilterRuntimeMax);
+                    setFilterRatingMin(tempFilterRatingMin); setFilterRatingMax(tempFilterRatingMax);
+                    setIsFilterApplied(enableYearFilter || enableRuntimeFilter || enableRatingFilter);
+                    setShowFilters(false);
+                  }} className="flex-1 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-bold transition">適用 (OK)</button>
                 </div>
               </div>
             )}
@@ -1046,28 +950,14 @@ export default function App() {
 
         {isSearchActive ? (
           <div className="px-4 pt-4">
-            {/* 要望3: クリアボタン（左矢印）と並び替えボタンの位置を入れ替え & 項目名を指定通りに設定 */}
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
-                <button 
-                  onClick={resetSearch} 
-                  className="p-1.5 bg-zinc-900 border border-zinc-800 rounded-md text-zinc-300 hover:text-white transition cursor-pointer flex items-center gap-1 text-xs font-bold"
-                  title="検索条件をクリア"
-                >
-                  <ArrowLeft size={16} />
-                  <span>クリア</span>
+                <button onClick={resetSearch} className="p-1.5 bg-zinc-900 border border-zinc-800 rounded-md text-zinc-300 hover:text-white transition cursor-pointer flex items-center gap-1 text-xs font-bold" title="検索条件をクリア">
+                  <ArrowLeft size={16} /> <span>クリア</span>
                 </button>
-                <h3 className="text-zinc-300 text-xs font-bold flex items-center gap-1.5">
-                  検索結果 {isSearching && <Loader2 size={12} className="animate-spin text-red-500" />}
-                </h3>
+                <h3 className="text-zinc-300 text-xs font-bold flex items-center gap-1.5">検索結果 {isSearching && <Loader2 size={12} className="animate-spin text-red-500" />}</h3>
               </div>
-
-              {/* ソートセレクター */}
-              <select
-                value={sortOrder}
-                onChange={e => setSortOrder(e.target.value)}
-                className="bg-zinc-900 border border-zinc-800 text-zinc-200 text-[11px] font-medium rounded-lg px-2.5 py-1.5 focus:outline-none cursor-pointer"
-              >
+              <select value={sortOrder} onChange={e => setSortOrder(e.target.value)} className="bg-zinc-900 border border-zinc-800 text-zinc-200 text-[11px] font-medium rounded-lg px-2.5 py-1.5 focus:outline-none cursor-pointer">
                 <option value="release_desc">公開日が新しい順</option>
                 <option value="release_asc">公開日が古い順</option>
                 <option value="runtime_desc">上映時間が長い順</option>
@@ -1094,12 +984,10 @@ export default function App() {
               <div className="flex flex-col items-center justify-center h-64 gap-3 text-zinc-500"><Loader2 size={32} className="animate-spin text-red-600" /><p className="text-xs font-bold">取得中...</p></div>
             ) : (
               <>
-                {/* おすすめ作品 */}
                 {recommendedList.length > 0 && (
                   <div className="px-4 pt-3">
                     <h3 className="text-zinc-100 font-bold text-sm mb-2">おすすめ作品</h3>
-                    <div 
-                      className="relative w-full aspect-[16/9] rounded-xl overflow-hidden shadow-2xl cursor-pointer bg-zinc-900 flex"
+                    <div className="relative w-full aspect-[16/9] rounded-xl overflow-hidden shadow-2xl cursor-pointer bg-zinc-900 flex"
                       onClick={() => openDetailModal(recommendedList[heroIndex], 'home')}
                       onTouchStart={e => heroTouchStartX.current = e.touches[0].clientX}
                       onTouchEnd={e => {
@@ -1113,7 +1001,6 @@ export default function App() {
                         {recommendedList.slice(0, 5).map((movie) => (
                           <div key={movie.id} className="w-full h-full flex-shrink-0 relative">
                             <img src={movie.backdropUrl || movie.posterUrl} className="w-full h-full object-cover" />
-                            <div className="absolute inset-0 bg-gradient-to-t from-[#0a0a0a] via-transparent to-transparent opacity-80" />
                             <div className="absolute inset-0 bg-gradient-to-t from-[#0a0a0a] via-[#0a0a0a]/20 to-transparent p-4 flex flex-col justify-end">
                               <h4 className="text-white font-extrabold text-base line-clamp-1 drop-shadow-md">{movie.title}</h4>
                               <p className="text-zinc-300 text-[11px] line-clamp-1 mt-0.5">{movie.apiSynopsis}</p>
@@ -1121,7 +1008,6 @@ export default function App() {
                           </div>
                         ))}
                       </div>
-                      
                       <div className="absolute top-2 right-3 flex gap-1.5 z-10">
                         {recommendedList.slice(0, 5).map((_, idx) => (
                           <span key={idx} className={`h-0.5 rounded-full transition-all ${idx === heroIndex ? 'bg-white/80 w-4' : 'bg-white/30 w-1.5'}`} />
@@ -1130,13 +1016,11 @@ export default function App() {
                     </div>
                   </div>
                 )}
-
                 {CATEGORIES.map(category => {
                   if (category === 'おすすめ') return null;
                   const allMovies = homeCategoriesData[category] || [];
                   if (allMovies.length === 0) return null;
                   const isNowPlaying = category === '公開中';
-                  
                   return (
                     <div key={category} className="space-y-2.5">
                       <div className="flex justify-between items-end px-4">
@@ -1166,29 +1050,19 @@ export default function App() {
     );
   };
 
-  // 全て見る画面
   const renderGenreView = () => {
     if (!genreViewCategory) return null;
     const movies = homeCategoriesData[genreViewCategory] || [];
     const sortedMovies = getSortedMovies(movies);
-
     return (
       <div className="flex-1 overflow-y-auto pb-24 bg-[#141414] animate-in fade-in duration-200">
-        {/* 要望5: 全て見る画面にも共通アプリヘッダーを表示 */}
         {renderAppHeader()}
-
         <header className="sticky top-[49px] bg-[#141414]/90 backdrop-blur-md px-4 py-3 flex items-center justify-between z-30 border-b border-zinc-800">
           <div className="flex items-center gap-3">
             <button onClick={() => { setActiveTab('home'); setSortOrder('release_desc'); }} className="text-zinc-400 hover:text-white p-1 cursor-pointer"><ArrowLeft size={22} /></button>
             <h2 className="text-base font-bold text-white">{genreViewCategory}</h2>
           </div>
-          
-          {/* 要望3: ソート順項目名 */}
-          <select
-            value={sortOrder}
-            onChange={e => setSortOrder(e.target.value)}
-            className="bg-zinc-900 border border-zinc-800 text-zinc-200 text-[11px] font-medium rounded-lg px-2 py-1 focus:outline-none cursor-pointer"
-          >
+          <select value={sortOrder} onChange={e => setSortOrder(e.target.value)} className="bg-zinc-900 border border-zinc-800 text-zinc-200 text-[11px] font-medium rounded-lg px-2 py-1 focus:outline-none cursor-pointer">
             <option value="release_desc">公開日が新しい順</option>
             <option value="release_asc">公開日が古い順</option>
             <option value="runtime_desc">上映時間が長い順</option>
@@ -1197,7 +1071,6 @@ export default function App() {
             <option value="rating_asc">評価が低い順</option>
           </select>
         </header>
-
         <div className="p-4 grid grid-cols-3 gap-2">
           {sortedMovies.map((movie: any) => {
             const status = getCollectionData(movie.id)?.status;
@@ -1213,33 +1086,19 @@ export default function App() {
     );
   };
 
-  // みたい！リスト・鑑賞済みリスト画面
   const renderMyList = (statusFilter: 'watchlist' | 'watched') => {
-    const list = myCollection
-      .filter(item => item.status === statusFilter)
-      .sort((a, b) => b.updatedAt - a.updatedAt);
-
+    const list = myCollection.filter(item => item.status === statusFilter).sort((a, b) => b.updatedAt - a.updatedAt);
     const title = statusFilter === 'watched' ? '鑑賞済み' : 'みたい！リスト';
-
     return (
       <div className="flex-1 overflow-y-auto pb-24 bg-[#141414]">
-        
-        {/* 共通ヘッダー */}
         {renderAppHeader()}
-
-        {/* 要望2: 「みたい！リスト」や「鑑賞済み」の文字サイズをアプリタイトルより少し小さい程度に拡大 */}
         <div className="sticky top-[49px] z-30 bg-[#141414]/95 backdrop-blur-md px-4 py-2 flex items-center justify-between border-b border-zinc-800/50">
           <h2 className="text-lg font-extrabold text-zinc-100 tracking-tight">{title}</h2>
           <div className="flex items-center gap-3">
             {isSelectionMode ? (
               <>
                 <button onClick={() => { setIsSelectionMode(false); setSelectedForDeletion(new Set()); }} className="text-xs text-zinc-400">キャンセル</button>
-                <button 
-                  onClick={() => selectedForDeletion.size > 0 && setShowBatchDeleteConfirm(true)} 
-                  className={`text-xs font-bold px-3 py-1.5 rounded transition ${selectedForDeletion.size > 0 ? 'bg-red-600 text-white' : 'bg-zinc-800 text-zinc-500'}`}
-                >
-                  削除 ({selectedForDeletion.size})
-                </button>
+                <button onClick={() => selectedForDeletion.size > 0 && setShowBatchDeleteConfirm(true)} className={`text-xs font-bold px-3 py-1.5 rounded transition ${selectedForDeletion.size > 0 ? 'bg-red-600 text-white' : 'bg-zinc-800 text-zinc-500'}`}>削除 ({selectedForDeletion.size})</button>
               </>
             ) : (
               <button onClick={() => setIsSelectionMode(true)} className="text-zinc-400 hover:text-white transition cursor-pointer"><Trash2 size={18}/></button>
@@ -1247,7 +1106,6 @@ export default function App() {
           </div>
         </div>
         
-        {/* 一括削除確認モーダル */}
         {showBatchDeleteConfirm && (
           <div className="absolute inset-0 bg-black/80 backdrop-blur-md z-[80] flex items-center justify-center p-6">
             <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl w-full max-w-xs text-center space-y-4 shadow-2xl">
@@ -1274,7 +1132,6 @@ export default function App() {
                 const score = item.score || 0;
                 const face = getFaceRating(score);
                 const isSelected = selectedForDeletion.has(item.movieId);
-                
                 return (
                   <div key={item.movieId} className="relative">
                     <div
@@ -1283,9 +1140,7 @@ export default function App() {
                           const newSet = new Set(selectedForDeletion);
                           isSelected ? newSet.delete(item.movieId) : newSet.add(item.movieId);
                           setSelectedForDeletion(newSet);
-                        } else {
-                          openDetailModal(movie, statusFilter);
-                        }
+                        } else { openDetailModal(movie, statusFilter); }
                       }}
                       className={`relative rounded-md overflow-hidden shadow-md active:scale-95 transition-transform cursor-pointer group ${isSelectionMode && isSelected ? 'ring-2 ring-red-600 opacity-60' : ''}`}
                     >
@@ -1316,26 +1171,29 @@ export default function App() {
     <div className="bg-black min-h-screen flex justify-center font-sans selection:bg-red-900/30 text-zinc-200">
       <div className="w-full max-w-md h-[100dvh] bg-[#141414] shadow-2xl overflow-hidden relative border-x border-zinc-900 flex flex-col">
 
-        {modalMode && modalMode !== 'delete_confirm' && modalMode === 'detail' && renderDetailModal()}
-        {modalMode && modalMode !== 'delete_confirm' && modalMode === 'review' && renderReviewModal()}
-        {modalMode === 'delete_confirm' && renderDetailModal()}
+        {/* メインコンテンツ（各タブの画面をdisplayプロパティで切り替えてスクロールなどを保持） */}
+        <div className="flex-1 relative overflow-hidden flex flex-col pb-[60px]">
+          <div style={{ display: activeTab === 'home' ? 'flex' : 'none' }} className="w-full h-full flex-col">{renderHome()}</div>
+          <div style={{ display: activeTab === 'genre_view' ? 'flex' : 'none' }} className="w-full h-full flex-col">{renderGenreView()}</div>
+          <div style={{ display: activeTab === 'watchlist' ? 'flex' : 'none' }} className="w-full h-full flex-col">{renderMyList('watchlist')}</div>
+          <div style={{ display: activeTab === 'watched' ? 'flex' : 'none' }} className="w-full h-full flex-col">{renderMyList('watched')}</div>
+          
+          {/* アクティブなタブに紐づくモーダルを展開 */}
+          {currentModalMode === 'detail' && renderDetailModal()}
+          {currentModalMode === 'review' && renderReviewModal()}
+        </div>
 
-        {!modalMode && activeTab === 'home' && renderHome()}
-        {!modalMode && activeTab === 'genre_view' && renderGenreView()}
-        {!modalMode && activeTab === 'watchlist' && renderMyList('watchlist')}
-        {!modalMode && activeTab === 'watched' && renderMyList('watched')}
-
-        {/* ボトムナビゲーション */}
-        <nav className="absolute bottom-0 left-0 right-0 bg-[#141414]/95 backdrop-blur-xl border-t border-zinc-800/80 flex justify-around items-center pb-safe pt-2 px-2 z-40">
-          <button onClick={() => { setActiveTab('home'); setModalMode(null); resetSearch(); }} className={`flex flex-col items-center p-2 transition cursor-pointer ${activeTab === 'home' || activeTab === 'genre_view' ? 'text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>
+        {/* フッターナビゲーション（Z-indexを高くし、常に最前面に表示） */}
+        <nav className="absolute bottom-0 left-0 right-0 bg-[#141414]/95 backdrop-blur-xl border-t border-zinc-800/80 flex justify-around items-center pb-safe pt-2 px-2 z-[100]">
+          <button onClick={() => handleTabClick('home')} className={`flex flex-col items-center p-2 transition cursor-pointer ${activeTab === 'home' || activeTab === 'genre_view' ? 'text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>
             <Home size={20} />
             <span className="text-[10px] mt-1 font-bold">ホーム</span>
           </button>
-          <button onClick={() => { setActiveTab('watchlist'); setModalMode(null); setIsSelectionMode(false); }} className={`flex flex-col items-center p-2 transition cursor-pointer ${activeTab === 'watchlist' ? 'text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>
+          <button onClick={() => handleTabClick('watchlist')} className={`flex flex-col items-center p-2 transition cursor-pointer ${activeTab === 'watchlist' ? 'text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>
             <Bookmark size={20} />
             <span className="text-[10px] mt-1 font-bold">みたい！</span>
           </button>
-          <button onClick={() => { setActiveTab('watched'); setModalMode(null); setIsSelectionMode(false); }} className={`flex flex-col items-center p-2 transition cursor-pointer ${activeTab === 'watched' ? 'text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>
+          <button onClick={() => handleTabClick('watched')} className={`flex flex-col items-center p-2 transition cursor-pointer ${activeTab === 'watched' ? 'text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>
             <CheckCircle2 size={20} />
             <span className="text-[10px] mt-1 font-bold">鑑賞済み</span>
           </button>
@@ -1348,6 +1206,13 @@ export default function App() {
         @keyframes animateIn {
           from { opacity: 0; transform: translateY(15px); }
           to { opacity: 1; transform: translateY(0); }
+        }
+        /* スライダーのツマミ部分だけクリック可能にする設定 */
+        input[type=range].custom-range-slider::-webkit-slider-thumb {
+          pointer-events: auto;
+        }
+        input[type=range].custom-range-slider::-moz-range-thumb {
+          pointer-events: auto;
         }
       `}} />
     </div>
