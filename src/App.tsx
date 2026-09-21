@@ -729,14 +729,28 @@ export default function App() {
     );
   };
 
+  // --- 共通ヘッダーコンポーネント ---
+  const renderAppHeader = () => (
+    <header className="sticky top-0 z-40 bg-[#141414]/95 backdrop-blur-md px-4 py-3 flex items-center justify-between border-b border-zinc-800/80">
+      <div className="flex items-center gap-2">
+        <Film className="text-red-600" size={20} />
+        <span className="text-white font-black text-xl tracking-tighter">MY CINEMA LOG</span>
+      </div>
+      <div className="text-xs text-zinc-400 font-medium">映画管理アプリ</div>
+    </header>
+  );
+
   // --- ホーム画面 ---
   const renderHome = () => {
     const recommendedList = homeCategoriesData['おすすめ'] || [];
 
     return (
       <div className="flex-1 overflow-y-auto pb-24 bg-[#141414]">
-        {renderHeader('MY CINEMA LOG')}
+        
+        {/* ここを共通ヘッダー呼び出しに変更 */}
+        {renderAppHeader()}
 
+        {/* 検索・タグエリア (top-[49px] はそのまま) */}
         <div className="sticky top-[49px] z-30 bg-[#141414]/95 backdrop-blur-md pt-3 pb-3 px-4 border-b border-zinc-800/50">
           <div className="flex flex-col gap-2.5">
             <div className="flex gap-2 relative">
@@ -929,17 +943,11 @@ export default function App() {
     return (
       <div className="flex-1 overflow-y-auto pb-24 bg-[#141414]">
         
-        {/* ① 一番上：ホームと同じ共通ヘッダー */}
-        <header className="sticky top-0 z-40 bg-[#141414]/95 backdrop-blur-md px-4 py-3 flex items-center justify-between border-b border-zinc-800/80">
-          <div className="flex items-center gap-2">
-            <Film className="text-red-700" size={20} />
-            <span className="text-white font-black text-xl tracking-tighter font-serif">MY CINEMA LOG</span>
-          </div>
-          <div className="text-xs text-zinc-400 font-medium">映画管理アプリ</div>
-        </header>
+        {/* ここを共通ヘッダー呼び出しに変更 */}
+        {renderAppHeader()}
 
-        {/* ② 一段下：リストのタイトルと一括削除ボタンのエリア */}
-        <div className="sticky top-[52px] z-30 bg-[#141414]/95 backdrop-blur-md px-4 py-3 flex items-center justify-between border-b border-zinc-800/50">
+        {/* 一段下：リストのタイトルと一括削除ボタンのエリア (top-[49px] を指定) */}
+        <div className="sticky top-[49px] z-30 bg-[#141414]/95 backdrop-blur-md px-4 py-3 flex items-center justify-between border-b border-zinc-800/50">
           <h2 className="text-lg font-black text-white tracking-wide">{title}</h2>
           <div className="flex items-center gap-3">
             {isSelectionMode ? (
@@ -957,7 +965,7 @@ export default function App() {
             )}
           </div>
         </div>
-
+        
         {/* --- 削除確認モーダル --- */}
         {showBatchDeleteConfirm && (
           <div className="absolute inset-0 bg-black/80 backdrop-blur-md z-[80] flex items-center justify-center p-6">
