@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Hero } from './components/Hero';
+import { Hero } from './components/HeroBanner';
 import { MovieCard } from './components/MovieCard';
 import { getGenres, getTrendingMovies, getNowPlayingMovies, discoverMovies } from './lib/tmdb';
 import { Movie, Genre } from './types';
