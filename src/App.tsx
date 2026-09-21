@@ -916,14 +916,49 @@ export default function App() {
   };
 
   const renderMyList = (statusFilter: 'watchlist' | 'watched') => {
-    const list = myCollection.filter(item => item.status === statusFilter).sort((a, b) => b.updatedAt - a.updatedAt);
+    const list = myCollection
+      .filter(item => item.status === statusFilter)
+      .sort((a, b) => b.updatedAt - a.updatedAt)
+      .map(item => ({
+        ...item.movieData,
+        collectionData: item
+      }));
+
     const title = statusFilter === 'watched' ? '鑑賞済み' : 'みたい！リスト';
 
     return (
-      <div className="flex-1 flex flex-col overflow-hidden bg-[#141414]">
-        {/* ホームと同じヘッダーデザインを適用し、一括削除モードのUIを組み込み */}
-        {renderHeader(title, true)}
+      <div className="flex-1 overflow-y-auto pb-24 bg-[#141414]">
+        
+        {/* ① 一番上：ホームと同じ共通ヘッダー */}
+        <header className="sticky top-0 z-40 bg-[#141414]/95 backdrop-blur-md px-4 py-3 flex items-center justify-between border-b border-zinc-800/80">
+          <div className="flex items-center gap-2">
+            <Film className="text-red-700" size={20} />
+            <span className="text-white font-black text-xl tracking-tighter font-serif">MY CINEMA LOG</span>
+          </div>
+          <div className="text-xs text-zinc-400 font-medium">映画管理アプリ</div>
+        </header>
 
+        {/* ② 一段下：リストのタイトルと一括削除ボタンのエリア */}
+        <div className="sticky top-[52px] z-30 bg-[#141414]/95 backdrop-blur-md px-4 py-3 flex items-center justify-between border-b border-zinc-800/50">
+          <h2 className="text-lg font-black text-white tracking-wide">{title}</h2>
+          <div className="flex items-center gap-3">
+            {isSelectionMode ? (
+              <>
+                <button onClick={() => { setIsSelectionMode(false); setSelectedForDeletion(new Set()); }} className="text-xs text-zinc-400">キャンセル</button>
+                <button 
+                  onClick={() => selectedForDeletion.size > 0 && setShowBatchDeleteConfirm(true)} 
+                  className={`text-xs font-bold px-3 py-1.5 rounded transition ${selectedForDeletion.size > 0 ? 'bg-red-600 text-white' : 'bg-zinc-800 text-zinc-500'}`}
+                >
+                  削除 ({selectedForDeletion.size})
+                </button>
+              </>
+            ) : (
+              <button onClick={() => setIsSelectionMode(true)} className="text-zinc-400 hover:text-white transition"><Trash2 size={18}/></button>
+            )}
+          </div>
+        </div>
+
+        {/* --- 削除確認モーダル --- */}
         {showBatchDeleteConfirm && (
           <div className="absolute inset-0 bg-black/80 backdrop-blur-md z-[80] flex items-center justify-center p-6">
             <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl w-full max-w-xs text-center space-y-4 shadow-2xl">
@@ -937,7 +972,7 @@ export default function App() {
           </div>
         )}
 
-        <div className="flex-1 overflow-y-auto pb-24 px-4 pt-4">
+        <div className="px-4 pt-4">
           {list.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-[50vh] text-zinc-600">
               {statusFilter === 'watched' ? <CheckCircle2 size={48} className="opacity-20 mb-4" /> : <Bookmark size={48} className="opacity-20 mb-4" />}
