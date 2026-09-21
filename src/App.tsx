@@ -35,10 +35,10 @@ const FACE_RATINGS = [
 ];
 
 const getFaceRating = (score: number) => {
-  if (score < 3) return FACE_RATINGS[0];
-  if (score < 5) return FACE_RATINGS[1];
-  if (score < 7) return FACE_RATINGS[2];
-  if (score < 9) return FACE_RATINGS[3];
+  if (score < 2) return FACE_RATINGS[0];
+  if (score < 4) return FACE_RATINGS[1];
+  if (score < 6) return FACE_RATINGS[2];
+  if (score < 8) return FACE_RATINGS[3];
   return FACE_RATINGS[4];
 };
 
