@@ -1,5 +1,9 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Star, Plus, ArrowLeft, Wand2, Loader2, Search, Bookmark, CheckCircle2, Home, X, Calendar, Edit3, ChevronRight, SlidersHorizontal, Trash2 } from 'lucide-react';
+import { 
+  Star, Plus, ArrowLeft, Wand2, Loader2, Search, Bookmark, CheckCircle2, 
+  Home, X, Calendar, Edit3, ChevronRight, SlidersHorizontal, Trash2,
+  Frown, Annoyed, Meh, Smile, Laugh // 線画の顔アイコンを追加
+} from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
 
 // --- APIキー設定 (Vite環境変数) ---
@@ -23,13 +27,13 @@ const GENRES: Record<string, string> = {
 };
 const CATEGORIES = Object.keys(GENRES);
 
-// 5段階の顔アイコンとラベルの定義
+// 5段階の線画顔アイコンとラベルの定義
 const FACE_RATINGS = [
-  { score: 2, label: 'クソ映画！', emoji: '🤮' },
-  { score: 4, label: 'う〜ん...', emoji: '😕' },
-  { score: 6, label: '普通', emoji: '😐' },
-  { score: 8, label: '面白い', emoji: '😊' },
-  { score: 10, label: '最高！', emoji: '🤩' },
+  { score: 2, label: 'クソ映画！', icon: Frown, color: 'text-blue-500' },
+  { score: 4, label: 'う〜ん...', icon: Annoyed, color: 'text-teal-400' },
+  { score: 6, label: '普通', icon: Meh, color: 'text-zinc-400' },
+  { score: 8, label: '面白い', icon: Smile, color: 'text-yellow-400' },
+  { score: 10, label: '最高！', icon: Laugh, color: 'text-red-500' },
 ];
 
 const getFaceRating = (score: number) => {
@@ -125,7 +129,7 @@ export default function App() {
   useEffect(() => {
     const fetchHomeMovies = async () => {
       setIsHomeLoading(true);
-      const newCategoryData: Record<string, any[]> = {};
+      const newCategoryData: Record<string, any[] मोटरसाइकिल = {};
 
       for (const cat of CATEGORIES) {
         let url = `https://api.themoviedb.org/3/movie/popular?api_key=${tmdbApiKey}&language=ja-JP&page=1`;
@@ -333,6 +337,11 @@ export default function App() {
     setShowFilters(false);
   };
 
+  const handleOpenGenreList = (category: string) => {
+    setGenreViewCategory(category);
+    setActiveTab('genre_view');
+  };
+
   const openDetailModal = (movie: any, originTab: string) => {
     setViewingMovie(movie);
     setFromTab(originTab);
@@ -510,7 +519,7 @@ export default function App() {
             {/* 評価点に応じた5段階の顔アイコン表示（点数をつける時 & 詳細画面） */}
             {status === 'watched' && currentScore > 0 && (
               <div className="flex items-center gap-3 bg-zinc-900/80 p-3.5 rounded-xl border border-zinc-800">
-                <span className="text-3xl">{face.emoji}</span>
+                <face.icon size={32} className={face.color} />
                 <div>
                   <div className="text-xs font-bold text-red-500">{face.label}</div>
                   <div className="text-sm font-extrabold text-white">{currentScore.toFixed(1)}点</div>
@@ -701,7 +710,7 @@ export default function App() {
           <div className="space-y-4 bg-zinc-900/60 p-4 rounded-xl border border-zinc-800">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <span className="text-4xl">{currentFace.emoji}</span>
+                <currentFace.icon size={40} className={currentFace.color} />
                 <div>
                   <span className="text-xs font-bold text-red-500 uppercase tracking-wider">{currentFace.label}</span>
                   <div className="text-2xl font-black text-white">{editScore.toFixed(1)}<span className="text-xs text-zinc-500"> /10.0</span></div>
@@ -721,7 +730,7 @@ export default function App() {
                   onClick={() => setEditScore(f.score)}
                   className={`flex flex-col items-center p-2 rounded-lg transition cursor-pointer ${Math.abs(editScore - f.score) < 1 ? 'bg-red-600/20 border border-red-500' : 'bg-zinc-800/50 border border-zinc-800'}`}
                 >
-                  <span className="text-lg">{f.emoji}</span>
+                  <f.icon size={24} className={f.color} />
                   <span className="text-[10px] text-zinc-400 mt-0.5">{f.label}</span>
                 </button>
               ))}
@@ -1059,7 +1068,8 @@ export default function App() {
 
                   {statusFilter === 'watched' && score > 0 && (
                     <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black via-black/80 to-transparent p-1.5 pt-4 flex justify-between items-center z-10 px-2">
-                      <span className="text-sm">{face.emoji}</span>
+                      {/* アイコンの表示に変更 */}
+                      <face.icon size={16} className={face.color} />
                       <span className="text-[11px] text-white font-bold">{score.toFixed(1)}</span>
                     </div>
                   )}
