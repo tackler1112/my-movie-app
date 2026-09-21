@@ -51,7 +51,7 @@ const FALLBACK_MOVIES: Record<string, any[]> = {
   ]
 };
 
-// 共通ダブルスライダーコンポーネント（下限操作不具合修正版）
+// 共通ダブルスライダーコンポーネント（両端操作不具合完全修正版）
 const DualRangeSlider = ({ min, max, step = 1, minVal, maxVal, onChange, unit = "" }: { min: number; max: number; step?: number; minVal: number; maxVal: number; onChange: (minV: number, maxV: number) => void; unit?: string; }) => {
   const minPercent = Math.min(100, Math.max(0, ((minVal - min) / (max - min)) * 100));
   const maxPercent = Math.min(100, Math.max(0, ((maxVal - min) / (max - min)) * 100));
@@ -72,6 +72,7 @@ const DualRangeSlider = ({ min, max, step = 1, minVal, maxVal, onChange, unit = 
       <div className="relative w-full h-7 flex items-center select-none">
         <div className="absolute w-full h-1.5 bg-zinc-800 rounded-lg" />
         <div className="absolute h-1.5 bg-red-600 rounded-lg" style={{ left: `${minPercent}%`, width: `${maxPercent - minPercent}%` }} />
+        
         <input 
           type="range" 
           min={min} 
@@ -79,8 +80,7 @@ const DualRangeSlider = ({ min, max, step = 1, minVal, maxVal, onChange, unit = 
           step={step} 
           value={minVal} 
           onChange={e => onChange(Math.min(Number(e.target.value), maxVal - step), maxVal)} 
-          className="absolute w-full h-1.5 opacity-0 cursor-pointer custom-range-slider" 
-          style={{ zIndex: minVal > max - (max - min) * 0.15 ? 40 : 35 }}
+          className="absolute w-full h-1.5 opacity-0 custom-range-slider z-30" 
         />
         <input 
           type="range" 
@@ -89,8 +89,9 @@ const DualRangeSlider = ({ min, max, step = 1, minVal, maxVal, onChange, unit = 
           step={step} 
           value={maxVal} 
           onChange={e => onChange(minVal, Math.max(Number(e.target.value), minVal + step))} 
-          className="absolute w-full h-1.5 opacity-0 cursor-pointer z-30 custom-range-slider" 
+          className="absolute w-full h-1.5 opacity-0 custom-range-slider z-40" 
         />
+        
         <div className="absolute w-4 h-4 bg-white border-2 border-red-600 rounded-full -translate-x-1/2 pointer-events-none z-20 shadow-md transition-transform" style={{ left: `${minPercent}%` }} />
         <div className="absolute w-4 h-4 bg-white border-2 border-red-600 rounded-full -translate-x-1/2 pointer-events-none z-20 shadow-md transition-transform" style={{ left: `${maxPercent}%` }} />
       </div>
@@ -148,7 +149,7 @@ export default function App() {
   const [showFilters, setShowFilters] = useState(false);
   const filterMenuRef = useRef<HTMLDivElement>(null);
   
-  // フィルター状態の統合管理
+  // フィルター・ページネーション状態の統合管理
   const [tempFilters, setTempFilters] = useState<FilterState>(defaultFilters);
   const [appliedFilters, setAppliedFilters] = useState<FilterState>(defaultFilters);
   const activeFilters = showFilters ? tempFilters : appliedFilters;
@@ -157,6 +158,9 @@ export default function App() {
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [sortOrder, setSortOrder] = useState<string>('release_desc');
+  const [searchPage, setSearchPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [runtimeUpdateTrigger, setRuntimeUpdateTrigger] = useState(0);
 
   const [editScore, setEditScore] = useState(0.0);
   const [editAiContent, setEditAiContent] = useState('');
@@ -296,6 +300,36 @@ export default function App() {
     }
   }, [currentViewingMovie, currentModalMode]);
 
+  // ソート時の上映時間補完フェッチ関数
+  const fetchMissingRuntimes = async (movies: any[]) => {
+    let updated = false;
+    await Promise.all(movies.map(async (m) => {
+      if (!runtimeCache.has(m.id)) {
+        try {
+          const detailRes = await fetch(`https://api.themoviedb.org/3/movie/${m.id}?api_key=${tmdbApiKey}`);
+          const detail = await detailRes.json();
+          runtimeCache.set(m.id, detail.runtime || 0);
+          updated = true;
+        } catch (e) {
+          runtimeCache.set(m.id, 0);
+        }
+      }
+    }));
+    if (updated) {
+      setRuntimeUpdateTrigger(prev => prev + 1);
+    }
+  };
+
+  useEffect(() => {
+    if (sortOrder.includes('runtime')) {
+      if (isSearchActive) {
+        fetchMissingRuntimes(searchResults);
+      } else if (activeTab === 'genre_view' && genreViewCategory) {
+        fetchMissingRuntimes(homeCategoriesData[genreViewCategory] || []);
+      }
+    }
+  }, [sortOrder, searchResults, isSearchActive, activeTab, genreViewCategory, homeCategoriesData]);
+
   // メニュー外タップでのキャンセル処理
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -310,33 +344,34 @@ export default function App() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [showFilters, appliedFilters]);
 
-  // リアルタイム検索エフェクト（上映時間取得・一括補完対応）
+  // リアルタイム検索・ページネーション対応エフェクト
   useEffect(() => {
     if (!isSearchActive) { setSearchResults([]); setIsSearching(false); return; }
     setIsSearching(true);
     const delayDebounceFn = setTimeout(async () => {
       try {
         if (!tmdbApiKey) return;
-        let url = `https://api.themoviedb.org/3/discover/movie?api_key=${tmdbApiKey}&language=ja-JP&sort_by=popularity.desc&page=1`;
+        let url = `https://api.themoviedb.org/3/discover/movie?api_key=${tmdbApiKey}&language=ja-JP&sort_by=popularity.desc&page=${searchPage}`;
         
-        if (activeFilters.enableYear) url += `&primary_release_date.gte=${activeFilters.yearMin}-01-01&primary_release_date.lte=${activeFilters.yearMax}-12-31`;
-        if (activeFilters.enableRating) url += `&vote_average.gte=${activeFilters.ratingMin}&vote_average.lte=${activeFilters.ratingMax}`;
+        if (appliedFilters.enableYear) url += `&primary_release_date.gte=${appliedFilters.yearMin}-01-01&primary_release_date.lte=${appliedFilters.yearMax}-12-31`;
+        if (appliedFilters.enableRating) url += `&vote_average.gte=${appliedFilters.ratingMin}&vote_average.lte=${appliedFilters.ratingMax}`;
         
         if (searchTitle) {
-          url = `https://api.themoviedb.org/3/search/movie?api_key=${tmdbApiKey}&language=ja-JP&query=${encodeURIComponent(searchTitle)}&page=1`;
+          url = `https://api.themoviedb.org/3/search/movie?api_key=${tmdbApiKey}&language=ja-JP&query=${encodeURIComponent(searchTitle)}&page=${searchPage}`;
         } else if (selectedTags.length > 0) {
           url += `&with_genres=${selectedTags.join(',')}`;
         }
 
         const res = await fetch(url);
         const data = await res.json();
+        setTotalPages(data.total_pages || 1);
         
         const basicFiltered = (data.results || []).filter((movie: any) => {
           const releaseYear = parseInt(movie.release_date?.substring(0, 4) || '0');
           const vote = movie.vote_average || 0;
           let keep = true;
-          if (activeFilters.enableYear) keep = keep && (releaseYear >= activeFilters.yearMin && releaseYear <= activeFilters.yearMax);
-          if (activeFilters.enableRating) keep = keep && (vote >= activeFilters.ratingMin && vote <= activeFilters.ratingMax);
+          if (appliedFilters.enableYear) keep = keep && (releaseYear >= appliedFilters.yearMin && releaseYear <= appliedFilters.yearMax);
+          if (appliedFilters.enableRating) keep = keep && (vote >= appliedFilters.ratingMin && vote <= appliedFilters.ratingMax);
           return keep;
         });
 
@@ -357,15 +392,23 @@ export default function App() {
         }));
 
         const fullyFiltered = resultsWithRuntime.filter(m => {
-          if (!activeFilters.enableRuntime) return true;
-          return m.runtimeMinutes >= activeFilters.runtimeMin && m.runtimeMinutes <= activeFilters.runtimeMax;
+          if (!appliedFilters.enableRuntime) return true;
+          return m.runtimeMinutes >= appliedFilters.runtimeMin && m.runtimeMinutes <= appliedFilters.runtimeMax;
         });
 
-        setSearchResults(fullyFiltered);
+        if (searchPage === 1) {
+          setSearchResults(fullyFiltered);
+        } else {
+          setSearchResults(prev => {
+            const existingIds = new Set(prev.map(p => p.id));
+            const newItems = fullyFiltered.filter(f => !existingIds.has(f.id));
+            return [...prev, ...newItems];
+          });
+        }
       } catch (err) {} finally { setIsSearching(false); }
     }, 400);
     return () => clearTimeout(delayDebounceFn);
-  }, [searchTitle, selectedTags, activeFilters, isSearchActive]);
+  }, [searchTitle, selectedTags, appliedFilters, isSearchActive, searchPage]);
 
   const getCollectionData = useCallback((movieId: string) => {
     return myCollection.find(item => item.movieId === movieId);
@@ -373,10 +416,12 @@ export default function App() {
 
   const toggleTagSelection = (genreId: string) => {
     setSelectedTags(prev => prev.includes(genreId) ? prev.filter(id => id !== genreId) : [...prev, genreId]);
+    setSearchPage(1);
   };
 
   const handleKeywordSearch = (keyword: string) => {
     setSearchTitle(keyword);
+    setSearchPage(1);
     setActiveTab('home');
     updateModalState(null);
   };
@@ -387,6 +432,7 @@ export default function App() {
     setTempFilters(defaultFilters);
     setAppliedFilters(defaultFilters);
     setShowFilters(false);
+    setSearchPage(1);
     setSortOrder('release_desc');
   };
 
@@ -435,7 +481,7 @@ export default function App() {
     setShowBatchDeleteConfirm(false);
   };
 
-  // 吸い込みアニメーションの実行関数
+  // 吸い込みアニメーションの実行関数（ゆっくり、はっきり）
   const triggerFlyAnimation = (targetTab: 'watchlist' | 'watched', callback: () => void) => {
     const targetEl = document.getElementById(`tab-btn-${targetTab}`);
     if (detailPosterRef.current && targetEl) {
@@ -449,7 +495,7 @@ export default function App() {
       setTimeout(() => {
         setFlyingPoster(null);
         callback();
-      }, 600);
+      }, 1000);
     } else {
       callback();
     }
@@ -465,17 +511,20 @@ export default function App() {
   };
 
   const handleQuickWatch = async (movie: any) => {
+    const existing = getCollectionData(movie.id);
+    const newEntry = {
+      movieId: movie.id, movieData: movie, status: 'watched',
+      score: existing?.score || 0.0,
+      aiContent: existing?.aiContent || '', myReview: existing?.myReview || '', updatedAt: Date.now()
+    };
+    
+    // 即時で状態を「watched」に更新し、ボタンを「修正する」に切り替える
+    setMyCollection(prev => [...prev.filter(item => item.movieId !== movie.id), newEntry]);
+    
     triggerFlyAnimation('watched', async () => {
-      updateModalState(null);
-      const existing = getCollectionData(movie.id);
-      const newEntry = {
-        movieId: movie.id, movieData: movie, status: 'watched',
-        score: existing?.score || 0.0, // みたいリストからみただ時は評価0に設定
-        aiContent: existing?.aiContent || '', myReview: existing?.myReview || '', updatedAt: Date.now()
-      };
-      setMyCollection(prev => [...prev.filter(item => item.movieId !== movie.id), newEntry]);
-      await saveToSupabase(newEntry);
+      // 画面を閉じない
     });
+    await saveToSupabase(newEntry);
   };
 
   const handleSaveReview = async () => {
@@ -486,7 +535,10 @@ export default function App() {
     };
     setMyCollection(prev => [...prev.filter(item => item.movieId !== currentViewingMovie.id), reviewEntry]);
     await saveToSupabase(reviewEntry);
-    updateModalState(null);
+    
+    triggerFlyAnimation('watched', () => {
+      updateModalState(null);
+    });
   };
 
   const handleGenerateAiPlot = async () => {
@@ -499,11 +551,12 @@ export default function App() {
   };
 
   const getSortedMovies = (movies: any[]) => {
+    const _trigger = runtimeUpdateTrigger; // 再レンダリング検知用
     return [...movies].sort((a, b) => {
       if (sortOrder === 'release_desc') return new Date(b.releaseDate === '不明' || !b.releaseDate ? '1900-01-01' : b.releaseDate).getTime() - new Date(a.releaseDate === '不明' || !a.releaseDate ? '1900-01-01' : a.releaseDate).getTime();
       if (sortOrder === 'release_asc') return new Date(a.releaseDate === '不明' || !a.releaseDate ? '1900-01-01' : a.releaseDate).getTime() - new Date(b.releaseDate === '不明' || !b.releaseDate ? '1900-01-01' : b.releaseDate).getTime();
-      if (sortOrder === 'runtime_desc') return (b.runtimeMinutes || runtimeCache.get(b.id) || 0) - (a.runtimeMinutes || runtimeCache.get(a.id) || 0);
-      if (sortOrder === 'runtime_asc') return (a.runtimeMinutes || runtimeCache.get(a.id) || 0) - (b.runtimeMinutes || runtimeCache.get(b.id) || 0);
+      if (sortOrder === 'runtime_desc') return (runtimeCache.get(b.id) ?? b.runtimeMinutes ?? 0) - (runtimeCache.get(a.id) ?? a.runtimeMinutes ?? 0);
+      if (sortOrder === 'runtime_asc') return (runtimeCache.get(a.id) ?? a.runtimeMinutes ?? 0) - (runtimeCache.get(b.id) ?? b.runtimeMinutes ?? 0);
       if (sortOrder === 'rating_desc') return parseFloat(b.voteAverage || '0') - parseFloat(a.voteAverage || '0');
       if (sortOrder === 'rating_asc') return parseFloat(a.voteAverage || '0') - parseFloat(b.voteAverage || '0');
       return 0;
@@ -613,7 +666,7 @@ export default function App() {
                       <div className="flex flex-wrap gap-2 pb-2">
                         {movieExtraDetails.genres.map((g: any) => (
                           <button key={g.id} onClick={() => {
-                            updateModalState(null); setActiveTab('home'); setSelectedTags([g.id.toString()]); setSearchTitle(''); setShowFilters(false); setSortOrder('release_desc');
+                            updateModalState(null); setActiveTab('home'); setSelectedTags([g.id.toString()]); setSearchTitle(''); setShowFilters(false); setSearchPage(1); setSortOrder('release_desc');
                           }} className="px-3 py-1 rounded-full text-[11px] font-bold bg-zinc-900 text-zinc-300 border border-zinc-700 hover:text-white cursor-pointer transition-colors">{g.name}</button>
                         ))}
                       </div>
@@ -665,7 +718,7 @@ export default function App() {
           )}
           {status === 'watched' && (
             <button onClick={() => openReviewModal(currentViewingMovie)} className="w-full py-3.5 bg-red-600 text-white font-bold rounded-lg flex justify-center items-center gap-2 hover:bg-red-700 active:scale-95 transition-all text-base shadow-[0_0_15px_rgba(220,38,38,0.4)] cursor-pointer">
-              <Edit3 size={18} /> レビューする
+              <Edit3 size={18} /> 修正する
             </button>
           )}
         </div>
@@ -755,11 +808,11 @@ export default function App() {
                 <input 
                   type="text" 
                   value={searchTitle} 
-                  onChange={(e) => setSearchTitle(e.target.value)} 
+                  onChange={(e) => { setSearchTitle(e.target.value); setSearchPage(1); }} 
                   placeholder="映画を検索..." 
                   className="w-full bg-zinc-900 border border-zinc-800 rounded-lg py-2.5 pl-10 pr-8 text-white font-medium focus:outline-none focus:border-zinc-500 focus:ring-1 focus:ring-zinc-500 transition-all placeholder:text-zinc-500 ios-safe-input" 
                 />
-                {searchTitle && <button onClick={() => setSearchTitle('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400"><X size={16} /></button>}
+                {searchTitle && <button onClick={() => { setSearchTitle(''); setSearchPage(1); }} className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400"><X size={16} /></button>}
               </div>
               <button onClick={() => {
                 if (!showFilters) {
@@ -834,10 +887,10 @@ export default function App() {
                 </div>
                 <div className="flex gap-3 mt-6 pt-4 border-t border-zinc-800">
                   <button onClick={() => {
-                    setTempFilters(defaultFilters); setAppliedFilters(defaultFilters); setShowFilters(false);
+                    setTempFilters(defaultFilters); setAppliedFilters(defaultFilters); setShowFilters(false); setSearchPage(1);
                   }} className="flex-1 py-2.5 bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg text-xs font-bold transition cursor-pointer">クリア</button>
                   <button onClick={() => {
-                    setAppliedFilters(tempFilters); setShowFilters(false);
+                    setAppliedFilters(tempFilters); setShowFilters(false); setSearchPage(1);
                   }} className="flex-1 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-bold transition cursor-pointer">適用 (OK)</button>
                 </div>
               </div>
@@ -850,14 +903,28 @@ export default function App() {
           {isSearchActive ? (
             <div className="px-4 pt-4">
               {sortedSearchResults.length > 0 ? (
-                <div className="grid grid-cols-3 gap-2">
-                  {sortedSearchResults.map((movie: any) => (
-                    <div key={movie.id} onClick={() => openDetailModal(movie, 'home')} className="cursor-pointer active:scale-95 transition-transform group relative">
-                      {movie.posterUrl ? <img src={movie.posterUrl} className="w-full aspect-[2/3] object-cover rounded-md shadow-md bg-zinc-800 group-hover:brightness-75 transition" /> : <div className="w-full aspect-[2/3] bg-zinc-800 rounded-md shadow-md flex items-center justify-center p-2 text-[10px] text-zinc-500">{movie.title}</div>}
-                      {getCollectionData(movie.id)?.status && <div className="absolute top-1 right-1 bg-black/70 rounded-full p-1 backdrop-blur-md border border-white/10 z-10">{getCollectionData(movie.id)?.status === 'watched' ? <CheckCircle2 size={12} className="text-green-500" /> : <Bookmark size={12} className="text-white" />}</div>}
+                <>
+                  <div className="grid grid-cols-3 gap-2">
+                    {sortedSearchResults.map((movie: any) => (
+                      <div key={movie.id} onClick={() => openDetailModal(movie, 'home')} className="cursor-pointer active:scale-95 transition-transform group relative">
+                        {movie.posterUrl ? <img src={movie.posterUrl} className="w-full aspect-[2/3] object-cover rounded-md shadow-md bg-zinc-800 group-hover:brightness-75 transition" /> : <div className="w-full aspect-[2/3] bg-zinc-800 rounded-md shadow-md flex items-center justify-center p-2 text-[10px] text-zinc-500">{movie.title}</div>}
+                        {getCollectionData(movie.id)?.status && <div className="absolute top-1 right-1 bg-black/70 rounded-full p-1 backdrop-blur-md border border-white/10 z-10">{getCollectionData(movie.id)?.status === 'watched' ? <CheckCircle2 size={12} className="text-green-500" /> : <Bookmark size={12} className="text-white" />}</div>}
+                      </div>
+                    ))}
+                  </div>
+                  {searchPage < totalPages && (
+                    <div className="py-6 flex justify-center">
+                      <button 
+                        onClick={() => setSearchPage(p => p + 1)} 
+                        disabled={isSearching}
+                        className="px-6 py-2 bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-bold rounded-full transition disabled:opacity-50 flex items-center gap-2 cursor-pointer"
+                      >
+                        {isSearching ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
+                        さらに読み込む
+                      </button>
                     </div>
-                  ))}
-                </div>
+                  )}
+                </>
               ) : (!isSearching && <p className="text-zinc-500 text-xs text-center mt-10">作品が見つかりません</p>)}
             </div>
           ) : (
@@ -1051,18 +1118,18 @@ export default function App() {
   };
 
   return (
-    <div className="bg-black min-h-screen h-dvh flex justify-center font-sans selection:bg-red-900/30 text-zinc-200 overflow-hidden app-wrapper">
+    <div className="bg-black h-[100dvh] w-full flex justify-center font-sans selection:bg-red-900/30 text-zinc-200 overflow-hidden app-wrapper">
       <div className="w-full max-w-md h-full bg-[#141414] shadow-2xl relative border-x border-zinc-900 flex flex-col overflow-hidden">
 
         {/* 吸い込みアニメーションオーバーレイ */}
         {flyingPoster && (
           <div 
-            className="fixed z-[999] pointer-events-none rounded-lg overflow-hidden shadow-2xl transition-all duration-600 ease-in-out border border-white/20"
+            className="fixed z-[999] pointer-events-none rounded-md overflow-hidden shadow-2xl"
             style={{
               backgroundImage: `url(${flyingPoster.url})`,
               backgroundSize: 'cover',
               backgroundPosition: 'center',
-              animation: 'flyToTab 0.6s cubic-bezier(0.4, 0, 0.2, 1) forwards'
+              animation: 'flyToTab 1.0s cubic-bezier(0.25, 1, 0.5, 1) forwards'
             }}
           />
         )}
@@ -1107,6 +1174,7 @@ export default function App() {
         }
         #root, .app-wrapper {
           height: 100dvh;
+          max-height: 100dvh;
         }
         
         .ios-safe-input {
@@ -1121,11 +1189,19 @@ export default function App() {
           to { opacity: 1; transform: translateY(0); }
         }
         
+        input[type=range].custom-range-slider {
+          pointer-events: none;
+        }
         input[type=range].custom-range-slider::-webkit-slider-thumb {
           pointer-events: auto;
+          -webkit-appearance: none;
+          width: 24px;
+          height: 24px;
         }
         input[type=range].custom-range-slider::-moz-range-thumb {
           pointer-events: auto;
+          width: 24px;
+          height: 24px;
         }
 
         @keyframes flyToTab {
@@ -1136,14 +1212,21 @@ export default function App() {
             height: ${flyingPoster?.start.height || 0}px;
             opacity: 1;
             transform: scale(1);
+            border-radius: 8px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+          }
+          30% {
+            transform: scale(1.05);
+            opacity: 1;
           }
           100% {
             top: ${flyingPoster?.target.top || 0}px;
             left: ${flyingPoster?.target.left || 0}px;
             width: ${flyingPoster?.target.width || 0}px;
             height: ${flyingPoster?.target.height || 0}px;
-            opacity: 0;
-            transform: scale(0.1);
+            opacity: 0.1;
+            transform: scale(0.2);
+            border-radius: 50%;
           }
         }
       `}} />
