@@ -279,15 +279,32 @@ export default function App() {
     const fetchHomeMovies = async () => {
       setIsHomeLoading(true);
       const newCategoryData: Record<string, any[]> = {};
+      
+      const today = new Date();
+      const yyyy = today.getFullYear();
+      const mm = String(today.getMonth() + 1).padStart(2, '0');
+      const dd = String(today.getDate()).padStart(2, '0');
+      const todayStr = `${yyyy}-${mm}-${dd}`;
+      
+      // API側フィルター（ホーム画面用）
+      const commonFilters = `&include_adult=${showAdult ? 'true' : 'false'}` 
+                          + (!showIncomplete ? '&vote_count.gte=3' : '')
+                          + `&primary_release_date.lte=${todayStr}`;
+
       for (const cat of CATEGORIES) {
         let url = `https://api.themoviedb.org/3/movie/popular?api_key=${tmdbApiKey}&language=ja-JP&page=1`;
-        if (cat === '公開中') url = `https://api.themoviedb.org/3/movie/now_playing?api_key=${tmdbApiKey}&language=ja-JP&region=JP&page=1`;
-        else if (GENRES[cat]) url = `https://api.themoviedb.org/3/discover/movie?api_key=${tmdbApiKey}&language=ja-JP&with_genres=${GENRES[cat]}&sort_by=popularity.desc&page=1`;
+        if (cat === '公開中') {
+          url = `https://api.themoviedb.org/3/movie/now_playing?api_key=${tmdbApiKey}&language=ja-JP&region=JP&page=1`;
+        } else if (GENRES[cat]) {
+          url = `https://api.themoviedb.org/3/discover/movie?api_key=${tmdbApiKey}&language=ja-JP&with_genres=${GENRES[cat]}&sort_by=popularity.desc&page=1${commonFilters}`;
+        }
+        
         try {
           const res = await fetch(url);
           const data = await res.json();
           if (data.results && data.results.length > 0) {
             let results = data.results.filter((movie: any) => {
+              if (!movie.release_date || movie.release_date > todayStr) return false;
               if (!showAdult && movie.adult) return false;
               if (!showIncomplete) {
                 if (!movie.poster_path) return false;
@@ -391,7 +408,7 @@ export default function App() {
     return movies;
   }, [sortOrder, searchTitle]);
 
-  // 一括検索・確実なフェッチ処理（60件完全保証版）
+  // 一括検索・確実なフェッチ処理（APIフィルター強化版）
   useEffect(() => {
     if (!isSearchActive && activeTab !== 'genre_view') { setDisplayList([]); setIsSearching(false); return; }
 
@@ -404,29 +421,48 @@ export default function App() {
         const isNormalGenre = (activeTab === 'genre_view' && genreViewCategory && genreViewCategory !== '公開中');
 
         let sortParam = isNormalGenre ? 'popularity.desc' : getApiSortParam(sortOrder);
+        
+        const today = new Date();
+        const yyyy = today.getFullYear();
+        const mm = String(today.getMonth() + 1).padStart(2, '0');
+        const dd = String(today.getDate()).padStart(2, '0');
+        const todayStr = `${yyyy}-${mm}-${dd}`;
 
         const buildUrl = (page: number) => {
-          let urlBase = '';
           if (isNowPlaying) {
-            urlBase = `https://api.themoviedb.org/3/movie/now_playing?api_key=${tmdbApiKey}&language=ja-JP&region=JP&page=${page}`;
-          } else if (isNormalGenre) {
-            urlBase = `https://api.themoviedb.org/3/discover/movie?api_key=${tmdbApiKey}&language=ja-JP&with_genres=${GENRES[genreViewCategory]}&sort_by=${sortParam}&page=${page}`;
-          } else if (isSearchActive) {
-            if (searchTitle) {
-              urlBase = `https://api.themoviedb.org/3/search/movie?api_key=${tmdbApiKey}&language=ja-JP&query=${encodeURIComponent(searchTitle)}&page=${page}`;
-            } else {
-              urlBase = `https://api.themoviedb.org/3/discover/movie?api_key=${tmdbApiKey}&language=ja-JP&sort_by=${sortParam}&page=${page}`;
-              if (appliedFilters.enableYear) urlBase += `&primary_release_date.gte=${appliedFilters.yearMin}-01-01&primary_release_date.lte=${appliedFilters.yearMax}-12-31`;
-              if (appliedFilters.enableRating) urlBase += `&vote_average.gte=${appliedFilters.ratingMin}&vote_average.lte=${appliedFilters.ratingMax}`;
-              if (searchPerson) {
-                let param = searchPerson.type === 'cast' ? `with_cast=${searchPerson.id}` : `with_crew=${searchPerson.id}`;
-                urlBase += `&${param}`;
-              } else if (selectedTags.length > 0) {
-                urlBase += `&with_genres=${selectedTags.join(',')}`;
-              }
-            }
+            return `https://api.themoviedb.org/3/movie/now_playing?api_key=${tmdbApiKey}&language=ja-JP&region=JP&page=${page}`;
           }
-          return urlBase;
+          
+          if (isSearchActive && searchTitle !== '') {
+            return `https://api.themoviedb.org/3/search/movie?api_key=${tmdbApiKey}&language=ja-JP&query=${encodeURIComponent(searchTitle)}&page=${page}&include_adult=${showAdult ? 'true' : 'false'}`;
+          }
+
+          let url = `https://api.themoviedb.org/3/discover/movie?api_key=${tmdbApiKey}&language=ja-JP&sort_by=${sortParam}&page=${page}`;
+          
+          // API側フィルター（可能な限りAPI側で弾いて未来日とゴミデータを排除）
+          url += `&include_adult=${showAdult ? 'true' : 'false'}`;
+          if (!showIncomplete) url += `&vote_count.gte=3`;
+
+          // 未来日除外ロジック（API側）
+          let maxDateStr = todayStr;
+          if (isSearchActive && appliedFilters.enableYear) {
+             const filterMaxDate = `${appliedFilters.yearMax}-12-31`;
+             if (filterMaxDate < todayStr) maxDateStr = filterMaxDate;
+             url += `&primary_release_date.gte=${appliedFilters.yearMin}-01-01`;
+          }
+          url += `&primary_release_date.lte=${maxDateStr}`;
+
+          if (isSearchActive) {
+            if (appliedFilters.enableRating) url += `&vote_average.gte=${appliedFilters.ratingMin}&vote_average.lte=${appliedFilters.ratingMax}`;
+            if (searchPerson) {
+              url += searchPerson.type === 'cast' ? `&with_cast=${searchPerson.id}` : `&with_crew=${searchPerson.id}`;
+            } else if (selectedTags.length > 0) {
+              url += `&with_genres=${selectedTags.join(',')}`;
+            }
+          } else if (isNormalGenre) {
+            url += `&with_genres=${GENRES[genreViewCategory]}`;
+          }
+          return url;
         };
 
         let fetchedMovies: any[] = [];
@@ -448,24 +484,32 @@ export default function App() {
           let currentApiPage = apiPage;
           const targetCount = 60; 
           
-          while (fetchedMovies.length < targetCount && loopCount < 15 && currentApiPage <= 500) {
+          // APIで未来日を弾いているためループ回数は少なく済むが、念のため20回上限とする
+          while (fetchedMovies.length < targetCount && loopCount < 20) {
             const res = await fetch(buildUrl(currentApiPage));
             const data = await res.json();
             if (data.total_pages) maxTotalPages = data.total_pages;
             
+            if (currentApiPage > maxTotalPages) break; // ページ上限を超えたら抜ける
+
             if (data.results && data.results.length > 0) {
               const filtered = data.results.filter((movie: any) => {
+                // 未来日とリリース日未定をフロントでも確実に弾く
+                if (!movie.release_date || movie.release_date > todayStr) return false;
+
                 if (!showAdult && movie.adult) return false;
                 if (!showIncomplete) {
                   if (!movie.poster_path) return false;
                   if (movie.vote_count < 3) return false;
                   if (!movie.genre_ids || movie.genre_ids.length === 0) return false;
                 }
-                const releaseYear = parseInt(movie.release_date?.substring(0, 4) || '0');
+                const releaseYear = parseInt(movie.release_date.substring(0, 4) || '0');
                 const vote = movie.vote_average || 0;
                 let keep = true;
-                if (appliedFilters.enableYear) keep = keep && (releaseYear >= appliedFilters.yearMin && releaseYear <= appliedFilters.yearMax);
-                if (appliedFilters.enableRating) keep = keep && (vote >= appliedFilters.ratingMin && vote <= appliedFilters.ratingMax);
+                if (searchTitle !== '' || searchPerson !== null || selectedTags.length > 0 || isFilterApplied) {
+                  if (appliedFilters.enableYear) keep = keep && (releaseYear >= appliedFilters.yearMin && releaseYear <= appliedFilters.yearMax);
+                  if (appliedFilters.enableRating) keep = keep && (vote >= appliedFilters.ratingMin && vote <= appliedFilters.ratingMax);
+                }
                 return keep;
               });
               fetchedMovies.push(...filtered);
