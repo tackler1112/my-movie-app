@@ -175,7 +175,6 @@ export default function App() {
   const [isSearching, setIsSearching] = useState(false);
   const [sortOrder, setSortOrder] = useState<string>('release_desc');
   
-  // APIページ管理（1回のフェッチ要求ごとの開始ページ）
   const [apiPage, setApiPage] = useState(1);
   const [nextApiPage, setNextApiPage] = useState(1);
   const [totalApiPages, setTotalApiPages] = useState(1);
@@ -216,7 +215,6 @@ export default function App() {
     localStorage.setItem('showIncomplete', JSON.stringify(showIncomplete));
   }, [showAdult, showIncomplete]);
 
-  // メニュー外側を触った時に閉じる処理（背景は操作可能なままにする）
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent | TouchEvent) => {
       if (isMenuOpen && menuRef.current && !menuRef.current.contains(event.target as Node)) {
@@ -234,7 +232,6 @@ export default function App() {
     };
   }, [isMenuOpen]);
 
-  // メニューが閉じたらメインビューに戻す
   useEffect(() => {
     if (!isMenuOpen) {
       const timer = setTimeout(() => setMenuView('main'), 300);
@@ -294,7 +291,7 @@ export default function App() {
               if (!showAdult && movie.adult) return false;
               if (!showIncomplete) {
                 if (!movie.poster_path) return false;
-                if (movie.vote_count < 3) return false; // 基準を3に変更
+                if (movie.vote_count < 3) return false;
                 if (!movie.genre_ids || movie.genre_ids.length === 0) return false;
               }
               return true;
@@ -385,7 +382,6 @@ export default function App() {
     if (sortOrder === 'runtime_desc') return [...movies].sort((a, b) => (runtimeCache.get(b.id) ?? b.runtimeMinutes ?? 0) - (runtimeCache.get(a.id) ?? a.runtimeMinutes ?? 0));
     if (sortOrder === 'runtime_asc') return [...movies].sort((a, b) => (runtimeCache.get(a.id) ?? a.runtimeMinutes ?? 0) - (runtimeCache.get(b.id) ?? b.runtimeMinutes ?? 0));
     
-    // search/movie の場合はAPI側で sort_by が無効になるためフロント側で補助ソートを実施
     if (searchTitle !== '') {
       if (sortOrder === 'release_desc') return [...movies].sort((a, b) => new Date(b.releaseDate === '不明' || !b.releaseDate ? '1900-01-01' : b.releaseDate).getTime() - new Date(a.releaseDate === '不明' || !a.releaseDate ? '1900-01-01' : a.releaseDate).getTime());
       if (sortOrder === 'release_asc') return [...movies].sort((a, b) => new Date(a.releaseDate === '不明' || !a.releaseDate ? '1900-01-01' : a.releaseDate).getTime() - new Date(b.releaseDate === '不明' || !b.releaseDate ? '1900-01-01' : b.releaseDate).getTime());
@@ -395,7 +391,7 @@ export default function App() {
     return movies;
   }, [sortOrder, searchTitle]);
 
-  // 一括検索・確実なフェッチ処理
+  // 一括検索・確実なフェッチ処理（60件完全保証版）
   useEffect(() => {
     if (!isSearchActive && activeTab !== 'genre_view') { setDisplayList([]); setIsSearching(false); return; }
 
@@ -437,7 +433,6 @@ export default function App() {
         let maxTotalPages = 1;
         let newNextApiPage = apiPage;
         
-        // 公開中の場合は初回5ページ(最大100件)を一気に取ってソート可能にする
         if (isNowPlaying && apiPage === 1) {
           const pagesToFetch = [1, 2, 3, 4, 5];
           const resArray = await Promise.all(pagesToFetch.map(p => fetch(buildUrl(p)).catch(()=>null)));
@@ -449,12 +444,11 @@ export default function App() {
           });
           newNextApiPage = 6;
         } else {
-          // ゴミデータが弾かれても確実に規定件数(60件)集まるまでループ取得（最大10回でストップ）
           let loopCount = 0;
           let currentApiPage = apiPage;
           const targetCount = 60; 
           
-          while (fetchedMovies.length < targetCount && loopCount < 10 && currentApiPage <= (maxTotalPages > 1 ? maxTotalPages : 500)) {
+          while (fetchedMovies.length < targetCount && loopCount < 15 && currentApiPage <= 500) {
             const res = await fetch(buildUrl(currentApiPage));
             const data = await res.json();
             if (data.total_pages) maxTotalPages = data.total_pages;
@@ -470,10 +464,8 @@ export default function App() {
                 const releaseYear = parseInt(movie.release_date?.substring(0, 4) || '0');
                 const vote = movie.vote_average || 0;
                 let keep = true;
-                if (searchTitle || searchPerson || selectedTags.length > 0 || isFilterApplied) {
-                  if (appliedFilters.enableYear) keep = keep && (releaseYear >= appliedFilters.yearMin && releaseYear <= appliedFilters.yearMax);
-                  if (appliedFilters.enableRating) keep = keep && (vote >= appliedFilters.ratingMin && vote <= appliedFilters.ratingMax);
-                }
+                if (appliedFilters.enableYear) keep = keep && (releaseYear >= appliedFilters.yearMin && releaseYear <= appliedFilters.yearMax);
+                if (appliedFilters.enableRating) keep = keep && (vote >= appliedFilters.ratingMin && vote <= appliedFilters.ratingMax);
                 return keep;
               });
               fetchedMovies.push(...filtered);
@@ -489,7 +481,6 @@ export default function App() {
         setTotalApiPages(maxTotalPages);
         setNextApiPage(newNextApiPage);
 
-        // 重複排除
         const uniqueMap = new Map();
         fetchedMovies.forEach(m => {
           if (!uniqueMap.has(m.id)) uniqueMap.set(m.id, m);
@@ -503,7 +494,6 @@ export default function App() {
 
         let fullyFiltered = mapped;
         
-        // 実行時間フィルターまたはソートが要求される場合のみ詳細をフェッチ
         if ((appliedFilters.enableRuntime || sortOrder === 'runtime_desc' || sortOrder === 'runtime_asc') && !isNormalGenre) {
           const resultsWithRuntime = await Promise.all(mapped.map(async (m: any) => {
             if (runtimeCache.has(m.id)) return { ...m, runtimeMinutes: runtimeCache.get(m.id) };
@@ -605,7 +595,6 @@ export default function App() {
     setApiPage(1); 
     setNextApiPage(1);
     setDisplayList([]);
-    // 遷移時に前回開いていたモーダルを確実にリセットする
     setTabStates(prev => ({ ...prev, genre_view: { modalMode: null, viewingMovie: null } }));
     setActiveTab('genre_view');
   };
@@ -713,8 +702,6 @@ export default function App() {
   const handleSaveReview = async () => {
     if (!currentViewingMovie) return;
     const existing = getCollectionData(currentViewingMovie.id);
-    
-    // みたい！を経由せずにいきなりレビューした場合のみアニメーションを発動
     const isDirectReview = !existing || existing.status === 'none';
 
     const reviewEntry = {
@@ -935,7 +922,7 @@ export default function App() {
 
         <div className="flex-1 overflow-y-auto p-5 space-y-6 pb-28">
           <div className="flex gap-4 items-center bg-zinc-900/50 p-3 rounded-xl border border-zinc-800">
-            {currentViewingMovie.posterUrl ? <img src={currentViewingMovie.posterUrl} className="w-14 h-20 object-cover rounded shadow-md bg-zinc-800" /> : <div className="w-14 h-20 bg-zinc-800 rounded shadow-md" />}
+            {currentViewingMovie.posterUrl ? <img ref={detailPosterRef} src={currentViewingMovie.posterUrl} className="w-14 h-20 object-cover rounded shadow-md bg-zinc-800" /> : <div className="w-14 h-20 bg-zinc-800 rounded shadow-md" />}
             <div className="flex-1"><h2 className="text-base font-bold text-white leading-tight line-clamp-2">{currentViewingMovie.title}</h2><p className="text-xs text-zinc-400 mt-1">{currentViewingMovie.releaseDate}</p></div>
           </div>
 
@@ -1345,26 +1332,26 @@ export default function App() {
     <div className="bg-black h-[100dvh] w-full flex justify-center font-sans selection:bg-red-900/30 text-zinc-200 overflow-hidden app-wrapper">
       <div className="w-full max-w-md h-full bg-[#141414] shadow-2xl relative border-x border-zinc-900 flex flex-col overflow-hidden">
 
-        {/* ハンバーガーメニュー (スライドアニメーション、背景操作可能) */}
+        {/* ハンバーガーメニュー (マットブラック基調の美しいスライドパネル) */}
         <div 
           ref={menuRef}
-          className={`absolute top-0 right-0 bottom-0 w-64 bg-zinc-900/98 backdrop-blur-xl border-l border-zinc-800 shadow-2xl z-[130] flex flex-col transition-transform duration-300 ease-in-out pointer-events-auto ${isMenuOpen ? 'translate-x-0' : 'translate-x-full'}`}
+          className={`absolute top-0 right-0 bottom-0 w-64 bg-[#161616] border-l border-zinc-800/80 shadow-2xl z-[130] flex flex-col transition-transform duration-300 ease-in-out pointer-events-auto ${isMenuOpen ? 'translate-x-0' : 'translate-x-full'}`}
         >
           {menuView === 'main' ? (
-            <div className="p-5 flex flex-col h-full animate-in fade-in zoom-in-95 duration-200">
-              <div className="flex justify-between items-center mb-6">
-                <h2 className="text-lg font-black text-white">メニュー</h2>
-                <button onClick={() => setIsMenuOpen(false)} className="text-zinc-400 hover:text-white cursor-pointer"><X size={24} /></button>
+            <div className="p-6 flex flex-col h-full animate-in fade-in zoom-in-95 duration-200">
+              <div className="flex justify-between items-center mb-8">
+                <h2 className="text-base font-extrabold text-white tracking-wider">メニュー</h2>
+                <button onClick={() => setIsMenuOpen(false)} className="text-zinc-400 hover:text-white cursor-pointer"><X size={22} /></button>
               </div>
-              <div className="space-y-2">
-                <button onClick={() => setMenuView('settings')} className="w-full flex items-center gap-3 py-3 px-4 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-200 font-bold transition cursor-pointer">
-                  <Settings size={18} /> 設定
+              <div className="space-y-3">
+                <button onClick={() => setMenuView('settings')} className="w-full flex items-center gap-3 py-3 px-4 rounded-xl bg-zinc-950/60 hover:bg-zinc-800/80 border border-zinc-800/60 text-zinc-200 font-bold transition cursor-pointer text-sm">
+                  <Settings size={18} className="text-red-500" /> 設定
                 </button>
               </div>
             </div>
           ) : (
-            <div className="p-5 flex flex-col h-full animate-in fade-in zoom-in-95 duration-200">
-              <div className="flex items-center gap-3 mb-6">
+            <div className="p-6 flex flex-col h-full animate-in fade-in zoom-in-95 duration-200">
+              <div className="flex items-center gap-3 mb-8">
                 <button onClick={() => setMenuView('main')} className="text-zinc-400 hover:text-white cursor-pointer p-1"><ArrowLeft size={20} /></button>
                 <h2 className="text-base font-bold text-white">設定</h2>
               </div>
@@ -1377,8 +1364,8 @@ export default function App() {
                   <label className="text-sm font-bold text-zinc-300">低評価・不完全データを表示</label>
                   <input type="checkbox" checked={showIncomplete} onChange={e => setShowIncomplete(e.target.checked)} className="accent-red-600 w-4 h-4 cursor-pointer" />
                 </div>
-                <p className="text-[10px] text-zinc-500 mt-2 leading-relaxed">
-                  ※オフにすると、ポスターがない作品、投票数が極端に少ない作品（3未満）、ジャンル未設定の作品が非表示になります。
+                <p className="text-[11px] text-zinc-500 mt-2 leading-relaxed">
+                  ※オフにすると、ポスターがない作品、投票数が極端に少ない作品（3未満）、ジャンル未設定の作品が自動で非表示になります。
                 </p>
               </div>
             </div>
