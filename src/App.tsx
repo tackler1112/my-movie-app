@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { 
   Star, Plus, ArrowLeft, Wand2, Loader2, Search, Bookmark, CheckCircle2, 
   Home, X, Calendar, Edit3, ChevronRight, SlidersHorizontal, Trash2,
-  Frown, Annoyed, Meh, Smile, Laugh, Film, Clock
+  Frown, Annoyed, Meh, Smile, Laugh, Film, Clock, Menu, Settings
 } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
 
@@ -51,11 +51,10 @@ const FALLBACK_MOVIES: Record<string, any[]> = {
   ]
 };
 
-// --- ダブルスライダー（重なり対応・リアルタイム反映版） ---
+// --- ダブルスライダー ---
 const DualRangeSlider = ({ min, max, step = 1, minVal, maxVal, onChange, unit = "" }: { min: number; max: number; step?: number; minVal: number; maxVal: number; onChange: (minV: number, maxV: number) => void; unit?: string; }) => {
   const [localMin, setLocalMin] = useState(minVal.toString());
   const [localMax, setLocalMax] = useState(maxVal.toString());
-  // 重なった際にどちらを最前面に出すか制御するステート
   const [minThumbZ, setMinThumbZ] = useState(30); 
 
   useEffect(() => { setLocalMin(minVal.toString()); setLocalMax(maxVal.toString()); }, [minVal, maxVal]);
@@ -161,6 +160,7 @@ export default function App() {
   const [apiGenres, setApiGenres] = useState<{ id: number; name: string }[]>([]);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [searchTitle, setSearchTitle] = useState('');
+  const [searchPerson, setSearchPerson] = useState<{ id: number, name: string, type: 'cast' | 'director' } | null>(null);
   
   const [showFilters, setShowFilters] = useState(false);
   const filterMenuRef = useRef<HTMLDivElement>(null);
@@ -168,14 +168,13 @@ export default function App() {
   const [tempFilters, setTempFilters] = useState<FilterState>(defaultFilters);
   const [appliedFilters, setAppliedFilters] = useState<FilterState>(defaultFilters);
   
-  const activeFilters = showFilters ? tempFilters : appliedFilters;
-  const isFilterApplied = activeFilters.enableYear || activeFilters.enableRuntime || activeFilters.enableRating;
+  const isFilterApplied = appliedFilters.enableYear || appliedFilters.enableRuntime || appliedFilters.enableRating;
   const [forceSearch, setForceSearch] = useState(false); 
 
   const [displayList, setDisplayList] = useState<any[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [sortOrder, setSortOrder] = useState<string>('release_desc');
-  const [displayCount, setDisplayCount] = useState(21);
+  const [displayCount, setDisplayCount] = useState(60);
   const [apiPage, setApiPage] = useState(1);
   const [totalApiPages, setTotalApiPages] = useState(1);
   
@@ -196,14 +195,23 @@ export default function App() {
   const [selectedForDeletion, setSelectedForDeletion] = useState<Set<string>>(new Set());
   const [showBatchDeleteConfirm, setShowBatchDeleteConfirm] = useState(false);
   
-  // みた！押下後のグローバル確認モーダル用ステート（チラつき防止のため完全分離）
   const [showReviewConfirm, setShowReviewConfirm] = useState(false); 
   const [confirmMovie, setConfirmMovie] = useState<any | null>(null);
 
   const detailPosterRef = useRef<HTMLImageElement>(null);
   const [flyingPoster, setFlyingPoster] = useState<{ url: string; start: DOMRect; target: DOMRect } | null>(null);
 
-  const isSearchActive = forceSearch || searchTitle !== '' || selectedTags.length > 0 || isFilterApplied;
+  // --- 設定用のステート ---
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [showAdult, setShowAdult] = useState(() => JSON.parse(localStorage.getItem('showAdult') || 'false'));
+  const [showIncomplete, setShowIncomplete] = useState(() => JSON.parse(localStorage.getItem('showIncomplete') || 'false'));
+
+  useEffect(() => {
+    localStorage.setItem('showAdult', JSON.stringify(showAdult));
+    localStorage.setItem('showIncomplete', JSON.stringify(showIncomplete));
+  }, [showAdult, showIncomplete]);
+
+  const isSearchActive = forceSearch || searchTitle !== '' || selectedTags.length > 0 || isFilterApplied || searchPerson !== null;
 
   useEffect(() => {
     const fetchApiGenres = async () => {
@@ -238,6 +246,7 @@ export default function App() {
     fetchCollection();
   }, []);
 
+  // ホーム画面の取得
   useEffect(() => {
     const fetchHomeMovies = async () => {
       setIsHomeLoading(true);
@@ -250,7 +259,15 @@ export default function App() {
           const res = await fetch(url);
           const data = await res.json();
           if (data.results && data.results.length > 0) {
-            let results = data.results;
+            let results = data.results.filter((movie: any) => {
+              if (!showAdult && movie.adult) return false;
+              if (!showIncomplete) {
+                if (!movie.poster_path) return false;
+                if (movie.vote_count < 5) return false;
+                if (!movie.genre_ids || movie.genre_ids.length === 0) return false;
+              }
+              return true;
+            });
             if (cat !== '公開中') results = results.sort(() => Math.random() - 0.5);
             newCategoryData[cat] = results.map((movie: any) => ({
               id: movie.id.toString(), title: movie.title || movie.original_title, genre: cat,
@@ -266,9 +283,8 @@ export default function App() {
       setIsHomeLoading(false);
     };
     fetchHomeMovies();
-  }, []);
+  }, [showAdult, showIncomplete]);
 
-  // おすすめカルーセル (10件対応)
   useEffect(() => {
     const recommendedList = homeCategoriesData['おすすめ'] || [];
     if (recommendedList.length === 0) return;
@@ -293,8 +309,10 @@ export default function App() {
         const watch = await watchRes.json();
         const recommendations = await recommendationsRes.json();
 
-        const director = credits.crew?.find((c: any) => c.job === 'Director')?.name || '不明';
-        const cast = credits.cast?.slice(0, 5).map((c: any) => c.name) || [];
+        const directorData = credits.crew?.find((c: any) => c.job === 'Director');
+        const directorObj = directorData ? { id: directorData.id, name: directorData.name, type: 'director' as const } : null;
+        const castObjs = credits.cast?.slice(0, 5).map((c: any) => ({ id: c.id, name: c.name, type: 'cast' as const })) || [];
+        
         const productionCompanies = detail.production_companies?.map((p: any) => p.name) || [];
         const runtimeMinutes = detail.runtime || 0;
         const runtime = runtimeMinutes ? `${runtimeMinutes}分` : '';
@@ -305,7 +323,7 @@ export default function App() {
         }));
 
         setMovieExtraDetails({ 
-          runtime, runtimeMinutes, director, cast, productionCompanies, streamingServices, 
+          runtime, runtimeMinutes, directorObj, castObjs, productionCompanies, streamingServices, 
           genres: (detail.genres || []).map((g: any) => ({...g, name: g.name === '履歴' ? '歴史' : (g.name === '謎' ? 'ミステリー' : g.name)}))
         });
 
@@ -322,81 +340,131 @@ export default function App() {
     }
   }, [currentViewingMovie, currentModalMode]);
 
-  // 並び替え処理ロジック（追加ブロックのみをソートし、既存の順番を維持する）
-  const getSortedBlock = useCallback((movies: any[]) => {
-    return [...movies].sort((a, b) => {
-      if (sortOrder === 'release_desc') return new Date(b.releaseDate === '不明' || !b.releaseDate ? '1900-01-01' : b.releaseDate).getTime() - new Date(a.releaseDate === '不明' || !a.releaseDate ? '1900-01-01' : a.releaseDate).getTime();
-      if (sortOrder === 'release_asc') return new Date(a.releaseDate === '不明' || !a.releaseDate ? '1900-01-01' : a.releaseDate).getTime() - new Date(b.releaseDate === '不明' || !b.releaseDate ? '1900-01-01' : b.releaseDate).getTime();
-      if (sortOrder === 'runtime_desc') return (runtimeCache.get(b.id) ?? b.runtimeMinutes ?? 0) - (runtimeCache.get(a.id) ?? a.runtimeMinutes ?? 0);
-      if (sortOrder === 'runtime_asc') return (runtimeCache.get(a.id) ?? a.runtimeMinutes ?? 0) - (runtimeCache.get(b.id) ?? b.runtimeMinutes ?? 0);
-      if (sortOrder === 'rating_desc') return parseFloat(b.voteAverage || '0') - parseFloat(a.voteAverage || '0');
-      if (sortOrder === 'rating_asc') return parseFloat(a.voteAverage || '0') - parseFloat(b.voteAverage || '0');
-      return 0;
-    });
-  }, [sortOrder]);
+  const getApiSortParam = (order: string) => {
+    switch (order) {
+      case 'release_desc': return 'primary_release_date.desc';
+      case 'release_asc': return 'primary_release_date.asc';
+      case 'rating_desc': return 'vote_average.desc';
+      case 'rating_asc': return 'vote_average.asc';
+      default: return 'popularity.desc';
+    }
+  };
 
-  // 検索・ジャンル一覧フェッチ (ドラッグ中もリアルタイム発火)
+  const getSortedBlock = useCallback((movies: any[]) => {
+    if (sortOrder === 'runtime_desc') return [...movies].sort((a, b) => (runtimeCache.get(b.id) ?? b.runtimeMinutes ?? 0) - (runtimeCache.get(a.id) ?? a.runtimeMinutes ?? 0));
+    if (sortOrder === 'runtime_asc') return [...movies].sort((a, b) => (runtimeCache.get(a.id) ?? a.runtimeMinutes ?? 0) - (runtimeCache.get(b.id) ?? b.runtimeMinutes ?? 0));
+    
+    // search/movie の場合はAPI側で sort_by が無効になるためフロント側で補助ソートを実施
+    if (searchTitle !== '') {
+      if (sortOrder === 'release_desc') return [...movies].sort((a, b) => new Date(b.releaseDate === '不明' || !b.releaseDate ? '1900-01-01' : b.releaseDate).getTime() - new Date(a.releaseDate === '不明' || !a.releaseDate ? '1900-01-01' : a.releaseDate).getTime());
+      if (sortOrder === 'release_asc') return [...movies].sort((a, b) => new Date(a.releaseDate === '不明' || !a.releaseDate ? '1900-01-01' : a.releaseDate).getTime() - new Date(b.releaseDate === '不明' || !b.releaseDate ? '1900-01-01' : b.releaseDate).getTime());
+      if (sortOrder === 'rating_desc') return [...movies].sort((a, b) => parseFloat(b.voteAverage || '0') - parseFloat(a.voteAverage || '0'));
+      if (sortOrder === 'rating_asc') return [...movies].sort((a, b) => parseFloat(a.voteAverage || '0') - parseFloat(b.voteAverage || '0'));
+    }
+    // 上記以外はAPI側で正しくソートされた順序をそのまま活かす
+    return movies;
+  }, [sortOrder, searchTitle]);
+
+  // 60件一括検索・ジャンル一覧フェッチ
   useEffect(() => {
-    if (!isSearchActive && activeTab !== 'genre_view') { setDisplayList([]); setDisplayCount(21); setIsSearching(false); return; }
+    if (!isSearchActive && activeTab !== 'genre_view') { setDisplayList([]); setDisplayCount(60); setIsSearching(false); return; }
 
     setIsSearching(true);
     const delayDebounceFn = setTimeout(async () => {
       try {
         if (!tmdbApiKey) return;
         
-        let url = '';
+        let sortParam = getApiSortParam(sortOrder);
+        let urlBase = '';
+        let isSearchEndpoint = false;
+
         if (activeTab === 'genre_view' && genreViewCategory) {
           if (genreViewCategory === '公開中') {
-            url = `https://api.themoviedb.org/3/movie/now_playing?api_key=${tmdbApiKey}&language=ja-JP&region=JP&page=${apiPage}`;
+            urlBase = `https://api.themoviedb.org/3/movie/now_playing?api_key=${tmdbApiKey}&language=ja-JP&region=JP&page=PAGE_PLACEHOLDER`;
           } else {
-            url = `https://api.themoviedb.org/3/discover/movie?api_key=${tmdbApiKey}&language=ja-JP&with_genres=${GENRES[genreViewCategory]}&sort_by=popularity.desc&page=${apiPage}`;
+            urlBase = `https://api.themoviedb.org/3/discover/movie?api_key=${tmdbApiKey}&language=ja-JP&with_genres=${GENRES[genreViewCategory]}&sort_by=${sortParam}&page=PAGE_PLACEHOLDER`;
           }
         } else if (isSearchActive) {
-          url = `https://api.themoviedb.org/3/discover/movie?api_key=${tmdbApiKey}&language=ja-JP&sort_by=popularity.desc&page=${apiPage}`;
-          if (activeFilters.enableYear) url += `&primary_release_date.gte=${activeFilters.yearMin}-01-01&primary_release_date.lte=${activeFilters.yearMax}-12-31`;
-          if (activeFilters.enableRating) url += `&vote_average.gte=${activeFilters.ratingMin}&vote_average.lte=${activeFilters.ratingMax}`;
           if (searchTitle) {
-            url = `https://api.themoviedb.org/3/search/movie?api_key=${tmdbApiKey}&language=ja-JP&query=${encodeURIComponent(searchTitle)}&page=${apiPage}`;
-          } else if (selectedTags.length > 0) {
-            url += `&with_genres=${selectedTags.join(',')}`;
+            urlBase = `https://api.themoviedb.org/3/search/movie?api_key=${tmdbApiKey}&language=ja-JP&query=${encodeURIComponent(searchTitle)}&page=PAGE_PLACEHOLDER`;
+            isSearchEndpoint = true;
+          } else {
+            urlBase = `https://api.themoviedb.org/3/discover/movie?api_key=${tmdbApiKey}&language=ja-JP&sort_by=${sortParam}&page=PAGE_PLACEHOLDER`;
+            if (appliedFilters.enableYear) urlBase += `&primary_release_date.gte=${appliedFilters.yearMin}-01-01&primary_release_date.lte=${appliedFilters.yearMax}-12-31`;
+            if (appliedFilters.enableRating) urlBase += `&vote_average.gte=${appliedFilters.ratingMin}&vote_average.lte=${appliedFilters.ratingMax}`;
+            if (searchPerson) {
+              let param = searchPerson.type === 'cast' ? `with_cast=${searchPerson.id}` : `with_crew=${searchPerson.id}`;
+              urlBase += `&${param}`;
+            } else if (selectedTags.length > 0) {
+              urlBase += `&with_genres=${selectedTags.join(',')}`;
+            }
           }
         }
 
-        const res = await fetch(url);
-        const data = await res.json();
-        setTotalApiPages(data.total_pages || 1);
+        const pagesToFetch = [apiPage, apiPage + 1, apiPage + 2];
+        const resArray = await Promise.all(pagesToFetch.map(p => fetch(urlBase.replace('PAGE_PLACEHOLDER', p.toString()))));
+        const dataArray = await Promise.all(resArray.map(r => r.json()));
         
-        const basicFiltered = (data.results || []).filter((movie: any) => {
+        let maxTotalPages = 1;
+        const allResults: any[] = [];
+        dataArray.forEach(data => {
+          if (data.total_pages > maxTotalPages) maxTotalPages = data.total_pages;
+          if (data.results) allResults.push(...data.results);
+        });
+        setTotalApiPages(maxTotalPages);
+        
+        const basicFiltered = allResults.filter((movie: any) => {
+          // デフォルトフィルター（設定でOFFの場合除外）
+          if (!showAdult && movie.adult) return false;
+          if (!showIncomplete) {
+            if (!movie.poster_path) return false;
+            if (movie.vote_count < 5) return false;
+            if (!movie.genre_ids || movie.genre_ids.length === 0) return false;
+          }
+
           if (activeTab === 'genre_view') return true; 
           const releaseYear = parseInt(movie.release_date?.substring(0, 4) || '0');
           const vote = movie.vote_average || 0;
           let keep = true;
-          if (activeFilters.enableYear) keep = keep && (releaseYear >= activeFilters.yearMin && releaseYear <= activeFilters.yearMax);
-          if (activeFilters.enableRating) keep = keep && (vote >= activeFilters.ratingMin && vote <= activeFilters.ratingMax);
+          // searchEndpoint時などはAPI側で絞れない場合があるので手動フィルタも適用
+          if (isSearchEndpoint || searchPerson || selectedTags.length > 0 || isFilterApplied) {
+            if (appliedFilters.enableYear) keep = keep && (releaseYear >= appliedFilters.yearMin && releaseYear <= appliedFilters.yearMax);
+            if (appliedFilters.enableRating) keep = keep && (vote >= appliedFilters.ratingMin && vote <= appliedFilters.ratingMax);
+          }
           return keep;
         });
 
-        const mapped = basicFiltered.map((m: any) => ({
-          id: m.id.toString(), title: m.title || m.original_title, posterUrl: m.poster_path ? `https://image.tmdb.org/t/p/w500${m.poster_path}` : '',
-          releaseDate: m.release_date || '不明', apiSynopsis: m.overview || '', voteAverage: m.vote_average ? m.vote_average.toFixed(1) : '0.0'
-        }));
-
-        const resultsWithRuntime = await Promise.all(mapped.map(async (m: any) => {
-          if (runtimeCache.has(m.id)) return { ...m, runtimeMinutes: runtimeCache.get(m.id) };
-          try {
-            const detailRes = await fetch(`https://api.themoviedb.org/3/movie/${m.id}?api_key=${tmdbApiKey}`);
-            const detail = await detailRes.json();
-            const rt = detail.runtime || 0;
-            runtimeCache.set(m.id, rt);
-            return { ...m, runtimeMinutes: rt };
-          } catch(e) { return { ...m, runtimeMinutes: 0 }; }
-        }));
-
-        const fullyFiltered = resultsWithRuntime.filter(m => {
-          if (activeTab === 'genre_view') return true;
-          if (!activeFilters.enableRuntime) return true;
-          return m.runtimeMinutes >= activeFilters.runtimeMin && m.runtimeMinutes <= activeFilters.runtimeMax;
+        // ページ跨ぎによる重複を排除
+        const uniqueMap = new Map();
+        basicFiltered.forEach(m => {
+          if (!uniqueMap.has(m.id)) uniqueMap.set(m.id, m);
         });
+        const uniqueResults = Array.from(uniqueMap.values());
+
+        const mapped = uniqueResults.map((m: any) => ({
+          id: m.id.toString(), title: m.title || m.original_title, posterUrl: m.poster_path ? `https://image.tmdb.org/t/p/w500${m.poster_path}` : '',
+          releaseDate: m.release_date || '不明', apiSynopsis: m.overview || '', voteAverage: m.vote_average ? m.vote_average.toFixed(1) : '0.0', runtimeMinutes: 0
+        }));
+
+        let fullyFiltered = mapped;
+        // 実行時間フィルターまたはソートが要求される場合のみ詳細をフェッチ
+        if ((appliedFilters.enableRuntime || sortOrder === 'runtime_desc' || sortOrder === 'runtime_asc') && activeTab !== 'genre_view') {
+          const resultsWithRuntime = await Promise.all(mapped.map(async (m: any) => {
+            if (runtimeCache.has(m.id)) return { ...m, runtimeMinutes: runtimeCache.get(m.id) };
+            try {
+              const detailRes = await fetch(`https://api.themoviedb.org/3/movie/${m.id}?api_key=${tmdbApiKey}`);
+              const detail = await detailRes.json();
+              const rt = detail.runtime || 0;
+              runtimeCache.set(m.id, rt);
+              return { ...m, runtimeMinutes: rt };
+            } catch(e) { return { ...m, runtimeMinutes: 0 }; }
+          }));
+
+          fullyFiltered = resultsWithRuntime.filter(m => {
+            if (!appliedFilters.enableRuntime) return true;
+            return m.runtimeMinutes >= appliedFilters.runtimeMin && m.runtimeMinutes <= appliedFilters.runtimeMax;
+          });
+        }
 
         if (apiPage === 1) {
           setDisplayList(getSortedBlock(fullyFiltered));
@@ -404,7 +472,7 @@ export default function App() {
           setDisplayList(prev => {
             const existingIds = new Set(prev.map(p => p.id));
             const newItems = fullyFiltered.filter(f => !existingIds.has(f.id));
-            // 新規取得分のみをソートし末尾に連結。1〜21番など既存の順序は絶対に崩れない。
+            // スクロール位置を固定するため、新規取得分のみをソートし既存リストの末尾に連結する
             return [...prev, ...getSortedBlock(newItems)];
           });
         }
@@ -412,27 +480,22 @@ export default function App() {
       } catch (err) {} finally { setIsSearching(false); }
     }, 400);
     return () => clearTimeout(delayDebounceFn);
-  }, [searchTitle, selectedTags, activeFilters, forceSearch, activeTab, genreViewCategory, apiPage, sortOrder, getSortedBlock]);
-
-  // 自動次ページフェッチ (表示件数に満たない場合)
-  useEffect(() => {
-    if (!isSearching && displayCount > displayList.length && apiPage < totalApiPages) {
-      setApiPage(prev => prev + 1);
-    }
-  }, [displayCount, displayList.length, apiPage, totalApiPages, isSearching]);
+  }, [searchTitle, selectedTags, appliedFilters, forceSearch, activeTab, genreViewCategory, apiPage, sortOrder, getSortedBlock, searchPerson, showAdult, showIncomplete]);
 
   useEffect(() => {
     setApiPage(1);
-    setDisplayCount(21);
+    setDisplayCount(60);
   }, [sortOrder]);
 
   const handleApplyFilters = () => {
     setAppliedFilters(tempFilters);
     setShowFilters(false);
     setApiPage(1);
-    setDisplayCount(21);
-    if (searchTitle === '' && selectedTags.length === 0 && !tempFilters.enableYear && !tempFilters.enableRuntime && !tempFilters.enableRating) {
+    setDisplayCount(60);
+    if (searchTitle === '' && selectedTags.length === 0 && searchPerson === null && !tempFilters.enableYear && !tempFilters.enableRuntime && !tempFilters.enableRating) {
       setForceSearch(true);
+    } else {
+      setForceSearch(false);
     }
   };
 
@@ -442,12 +505,16 @@ export default function App() {
 
   const toggleTagSelection = (genreId: string) => {
     setSelectedTags(prev => prev.includes(genreId) ? prev.filter(id => id !== genreId) : [...prev, genreId]);
-    setApiPage(1); setDisplayCount(21); setForceSearch(false);
+    setApiPage(1); setDisplayCount(60); setForceSearch(false); setSearchPerson(null);
   };
 
-  const handleKeywordSearch = (keyword: string) => {
-    setSearchTitle(keyword);
-    setApiPage(1); setDisplayCount(21); setForceSearch(false);
+  const handlePersonSearch = (person: { id: number, name: string, type: 'cast' | 'director' }) => {
+    setSearchTitle('');
+    setSelectedTags([]);
+    setSearchPerson(person);
+    setApiPage(1); 
+    setDisplayCount(60); 
+    setForceSearch(false);
     setActiveTab('home');
     updateModalState(null);
   };
@@ -455,11 +522,12 @@ export default function App() {
   const resetSearch = () => {
     setSearchTitle('');
     setSelectedTags([]);
+    setSearchPerson(null);
     setTempFilters(defaultFilters);
     setAppliedFilters(defaultFilters);
     setShowFilters(false);
     setApiPage(1);
-    setDisplayCount(21);
+    setDisplayCount(60);
     setSortOrder('release_desc');
     setForceSearch(false);
     setDisplayList([]);
@@ -468,7 +536,7 @@ export default function App() {
   const handleOpenGenreList = (category: string) => {
     setGenreViewCategory(category);
     setSortOrder('release_desc');
-    setApiPage(1); setDisplayCount(21);
+    setApiPage(1); setDisplayCount(60);
     setActiveTab('genre_view');
   };
 
@@ -511,7 +579,6 @@ export default function App() {
     setShowBatchDeleteConfirm(false);
   };
 
-  // 吸い込みアニメーションの起動
   const triggerFlyAnimation = (targetTab: 'watchlist' | 'watched', movieUrl: string, onStart: () => void) => {
     const targetEl = document.getElementById(`tab-btn-${targetTab}`);
     const startRect = detailPosterRef.current?.getBoundingClientRect();
@@ -519,7 +586,7 @@ export default function App() {
     if (startRect && targetEl) {
       const targetRect = targetEl.getBoundingClientRect();
       setFlyingPoster({ url: movieUrl, start: startRect, target: targetRect });
-      onStart(); // アニメ開始と同時にモーダル破棄や確認画面表示を実行
+      onStart(); 
       setTimeout(() => { setFlyingPoster(null); }, 900);
     } else {
       onStart();
@@ -528,7 +595,7 @@ export default function App() {
 
   const handleAddWatchlist = async (movie: any) => {
     triggerFlyAnimation('watchlist', movie.posterUrl, async () => {
-      updateModalState(null); // 詳細画面を即座に閉じる
+      updateModalState(null); 
       const newEntry = { movieId: movie.id, movieData: movie, status: 'watchlist', updatedAt: Date.now() };
       setMyCollection(prev => [...prev.filter(item => item.movieId !== movie.id), newEntry]);
       await saveToSupabase(newEntry);
@@ -540,7 +607,6 @@ export default function App() {
     setConfirmMovie(currentViewingMovie);
     
     triggerFlyAnimation('watched', currentViewingMovie.posterUrl, () => {
-      // アニメーション開始と『同時』に詳細画面を即座に破棄し、グローバルの確認モーダルを起動
       updateModalState(null);
       setShowReviewConfirm(true); 
     });
@@ -548,8 +614,6 @@ export default function App() {
 
   const confirmQuickWatch = async (doReview: boolean) => {
     if (!confirmMovie) return;
-    
-    // モーダルを即座に閉じる（背景はすでに一覧画面なのでチラつかない）
     setShowReviewConfirm(false);
     
     const existing = getCollectionData(confirmMovie.id);
@@ -563,7 +627,6 @@ export default function App() {
     saveToSupabase(newEntry);
 
     if (doReview) {
-      // レビューする場合は、「鑑賞済み」タブに切り替え、みたいタブをリセットした上でレビュー画面を開く
       setActiveTab('watched');
       setTabStates(prev => ({ 
         ...prev, 
@@ -579,10 +642,7 @@ export default function App() {
 
   const handleSaveReview = async () => {
     if (!currentViewingMovie) return;
-    if (editScore === 0.0 || editScore === 0) {
-      alert("評価点数を設定してください！");
-      return;
-    }
+    // 評価点数の必須チェックを廃止し、0.0の状態でも保存可能に
     const reviewEntry = {
       movieId: currentViewingMovie.id, movieData: currentViewingMovie, status: 'watched',
       score: Number(editScore.toFixed(1)), aiContent: editAiContent, myReview: editMyReview, updatedAt: Date.now()
@@ -621,7 +681,9 @@ export default function App() {
         <Film className="text-red-600" size={20} />
         <span className="text-white font-black text-xl tracking-tighter">MY CINEMA LOG</span>
       </div>
-      <div className="text-xs text-zinc-400 font-medium">映画管理アプリ</div>
+      <button onClick={() => setIsSettingsOpen(true)} className="p-1 cursor-pointer text-zinc-400 hover:text-white transition">
+        <Menu size={24} />
+      </button>
     </header>
   );
 
@@ -696,8 +758,20 @@ export default function App() {
               ) : movieExtraDetails ? (
                 <div className="space-y-4">
                   <div className="grid grid-cols-2 gap-2 bg-zinc-900/50 p-3 rounded-lg border border-zinc-800">
-                    <div><span className="text-zinc-500 block mb-1">監督</span><button onClick={() => handleKeywordSearch(movieExtraDetails.director)} className="text-zinc-200 font-bold hover:underline cursor-pointer">{movieExtraDetails.director}</button></div>
-                    <div><span className="text-zinc-500 block mb-1">キャスト</span><div className="flex flex-col items-start gap-1">{movieExtraDetails.cast.map((c: string) => <button key={c} onClick={() => handleKeywordSearch(c)} className="text-zinc-200 font-bold line-clamp-1 hover:underline text-left cursor-pointer">{c}</button>)}</div></div>
+                    <div>
+                      <span className="text-zinc-500 block mb-1">監督</span>
+                      {movieExtraDetails.directorObj ? (
+                        <button onClick={() => handlePersonSearch(movieExtraDetails.directorObj)} className="text-zinc-200 font-bold hover:underline cursor-pointer">{movieExtraDetails.directorObj.name}</button>
+                      ) : <span className="text-zinc-200 font-bold">不明</span>}
+                    </div>
+                    <div>
+                      <span className="text-zinc-500 block mb-1">キャスト</span>
+                      <div className="flex flex-col items-start gap-1">
+                        {movieExtraDetails.castObjs.map((c: any) => (
+                          <button key={c.id} onClick={() => handlePersonSearch(c)} className="text-zinc-200 font-bold line-clamp-1 hover:underline text-left cursor-pointer">{c.name}</button>
+                        ))}
+                      </div>
+                    </div>
                   </div>
 
                   {movieExtraDetails.genres && movieExtraDetails.genres.length > 0 && (
@@ -706,7 +780,7 @@ export default function App() {
                       <div className="flex flex-wrap gap-2 pb-2">
                         {movieExtraDetails.genres.map((g: any) => (
                           <button key={g.id} onClick={() => {
-                            updateModalState(null); setActiveTab('home'); setSelectedTags([g.id.toString()]); setSearchTitle(''); setShowFilters(false); setApiPage(1); setDisplayCount(21); setForceSearch(false); setSortOrder('release_desc');
+                            updateModalState(null); setActiveTab('home'); setSelectedTags([g.id.toString()]); setSearchTitle(''); setSearchPerson(null); setShowFilters(false); setApiPage(1); setDisplayCount(60); setForceSearch(false); setSortOrder('release_desc');
                           }} className="px-3 py-1 rounded-full text-[11px] font-bold bg-zinc-900 text-zinc-300 border border-zinc-700 hover:text-white cursor-pointer transition-colors">{g.name}</button>
                         ))}
                       </div>
@@ -775,7 +849,7 @@ export default function App() {
         <header className="flex items-center justify-between p-4 bg-[#141414]/90 backdrop-blur-md sticky top-0 z-10 border-b border-zinc-800">
           <button onClick={() => updateModalState('detail')} className="p-2 text-zinc-400 hover:text-white transition cursor-pointer"><ArrowLeft size={22} /></button>
           <span className="font-bold text-sm text-zinc-100">レビューを記録</span>
-          <button onClick={handleSaveReview} className={`text-white font-bold text-sm px-4 py-1.5 rounded-md active:scale-95 transition-transform cursor-pointer ${editScore > 0 ? 'bg-red-600 hover:bg-red-700' : 'bg-zinc-600'}`}>保存</button>
+          <button onClick={handleSaveReview} className="text-white font-bold text-sm px-4 py-1.5 rounded-md active:scale-95 transition-transform cursor-pointer bg-red-600 hover:bg-red-700">保存</button>
         </header>
 
         <div className="flex-1 overflow-y-auto p-5 space-y-6 pb-28">
@@ -789,11 +863,11 @@ export default function App() {
               {currentFace ? (
                 <currentFace.icon size={40} color={currentFace.color} strokeWidth={1.2} />
               ) : (
-                <div className="w-10 h-10 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-zinc-500 font-bold text-xs">必須</div>
+                <div className="w-10 h-10 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-zinc-500 font-bold text-xs">-</div>
               )}
               <div>
                 <span className="text-xs font-bold uppercase tracking-wider" style={{ color: currentFace?.color || '#a1a1aa' }}>
-                  {currentFace ? currentFace.label : '評価点数を選択してください'}
+                  {currentFace ? currentFace.label : '任意: 評価を付ける'}
                 </span>
                 <div className="text-2xl font-black text-white">{editScore.toFixed(1)}<span className="text-xs text-zinc-500"> /10.0</span></div>
               </div>
@@ -822,7 +896,7 @@ export default function App() {
           <div className="space-y-3">
             <label className="text-sm font-bold text-white">自分の感想</label>
             <textarea value={editMyReview} onChange={(e) => setEditMyReview(e.target.value)} placeholder="率直な感想を記録..." className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-4 text-zinc-200 text-sm focus:outline-none focus:border-zinc-500 min-h-[100px] resize-none transition" />
-            <button onClick={handleSaveReview} className={`w-full py-3.5 text-white font-bold rounded-xl shadow-lg active:scale-95 transition mt-2 cursor-pointer ${editScore > 0 ? 'bg-red-600 hover:bg-red-700' : 'bg-zinc-700 text-zinc-400'}`}>保存する</button>
+            <button onClick={handleSaveReview} className="w-full py-3.5 text-white font-bold rounded-xl shadow-lg active:scale-95 transition mt-2 cursor-pointer bg-red-600 hover:bg-red-700">保存する</button>
           </div>
         </div>
       </div>
@@ -849,21 +923,30 @@ export default function App() {
                 <input 
                   type="text" 
                   value={searchTitle} 
-                  onChange={(e) => { setSearchTitle(e.target.value); setApiPage(1); setDisplayCount(21); setForceSearch(false); }} 
+                  onChange={(e) => { setSearchTitle(e.target.value); setApiPage(1); setDisplayCount(60); setForceSearch(false); setSearchPerson(null); }} 
                   placeholder="映画を検索..." 
                   className="w-full bg-zinc-900 border border-zinc-800 rounded-lg py-2.5 pl-10 pr-8 text-white font-medium focus:outline-none focus:border-zinc-500 focus:ring-1 focus:ring-zinc-500 transition-all placeholder:text-zinc-500 ios-safe-input" 
                 />
-                {searchTitle && <button onClick={() => { setSearchTitle(''); setApiPage(1); setDisplayCount(21); setForceSearch(false); }} className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400"><X size={16} /></button>}
+                {searchTitle && <button onClick={() => { setSearchTitle(''); setApiPage(1); setDisplayCount(60); setForceSearch(false); }} className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 cursor-pointer"><X size={16} /></button>}
               </div>
               <button onClick={() => {
                 if (!showFilters) {
-                  setTempFilters(activeFilters);
+                  setTempFilters(appliedFilters);
                   setShowFilters(true);
                 } else { setShowFilters(false); }
               }} className={`filter-toggle-btn w-[42px] h-[42px] rounded-full border flex items-center justify-center transition shrink-0 cursor-pointer ${isFilterApplied ? 'bg-red-600 border-red-500 text-white' : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white'}`}>
                 <SlidersHorizontal size={16} />
               </button>
             </div>
+            
+            {searchPerson && (
+              <div className="flex items-center gap-2 pt-0.5 px-1">
+                <span className="text-zinc-200 text-[11px] font-bold bg-zinc-800 px-3 py-1 rounded-full border border-zinc-700 flex items-center gap-1 shadow-md">
+                  {searchPerson.type === 'director' ? '監督' : 'キャスト'}: {searchPerson.name}
+                  <button onClick={() => { setSearchPerson(null); setApiPage(1); setDisplayCount(60); setForceSearch(true); }} className="ml-1 text-zinc-400 hover:text-white cursor-pointer"><X size={14} /></button>
+                </span>
+              </div>
+            )}
 
             {selectedGenreObjs.length > 0 && (
               <div className="flex flex-wrap gap-1.5 pt-1">
@@ -927,7 +1010,7 @@ export default function App() {
                 </div>
                 <div className="flex gap-3 mt-6 pt-4 border-t border-zinc-800">
                   <button onClick={() => {
-                    setTempFilters(defaultFilters); setAppliedFilters(defaultFilters); setShowFilters(false); setApiPage(1); setDisplayCount(21); setForceSearch(false);
+                    setTempFilters(defaultFilters); setAppliedFilters(defaultFilters); setShowFilters(false); setApiPage(1); setDisplayCount(60); setForceSearch(false);
                   }} className="flex-1 py-2.5 bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg text-xs font-bold transition cursor-pointer">クリア</button>
                   <button onClick={handleApplyFilters} className="flex-1 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-bold transition cursor-pointer">適用 (OK)</button>
                 </div>
@@ -950,11 +1033,11 @@ export default function App() {
                       </div>
                     ))}
                   </div>
-                  {/* さらに読み込む（21件追加） */}
-                  {displayCount < 1000 && (displayCount < displayList.length || apiPage < totalApiPages) && (
+                  {/* さらに読み込む（60件追加） */}
+                  {displayCount < 1000 && (displayCount < displayList.length || apiPage + 2 < totalApiPages) && (
                     <div className="py-6 flex justify-center">
                       <button 
-                        onClick={() => setDisplayCount(p => p + 21)} 
+                        onClick={() => { if(!isSearching){ setApiPage(p => p + 3); setDisplayCount(p => p + 60); } }} 
                         disabled={isSearching}
                         className="px-6 py-2 bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-bold rounded-full transition disabled:opacity-50 flex items-center gap-2 cursor-pointer shadow-lg"
                       >
@@ -1074,11 +1157,10 @@ export default function App() {
                   );
                 })}
               </div>
-              {/* ジャンル一覧にも「さらに読み込む」を追加 */}
-              {displayCount < 1000 && (displayCount < displayList.length || apiPage < totalApiPages) && (
+              {displayCount < 1000 && (displayCount < displayList.length || apiPage + 2 < totalApiPages) && (
                 <div className="py-6 flex justify-center">
                   <button 
-                    onClick={() => setDisplayCount(p => p + 21)} 
+                    onClick={() => { if(!isSearching){ setApiPage(p => p + 3); setDisplayCount(p => p + 60); } }} 
                     disabled={isSearching}
                     className="px-6 py-2 bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-bold rounded-full transition disabled:opacity-50 flex items-center gap-2 cursor-pointer shadow-lg"
                   >
@@ -1181,6 +1263,32 @@ export default function App() {
     <div className="bg-black h-[100dvh] w-full flex justify-center font-sans selection:bg-red-900/30 text-zinc-200 overflow-hidden app-wrapper">
       <div className="w-full max-w-md h-full bg-[#141414] shadow-2xl relative border-x border-zinc-900 flex flex-col overflow-hidden">
 
+        {/* 設定モーダル（ハンバーガーメニューから起動） */}
+        {isSettingsOpen && (
+          <div className="absolute inset-0 bg-black/80 backdrop-blur-md z-[120] flex justify-end animate-in fade-in">
+            <div className="w-72 bg-zinc-900 h-full p-5 border-l border-zinc-800 shadow-2xl flex flex-col">
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-lg font-bold text-white flex items-center gap-2"><Settings size={20} /> 設定</h2>
+                <button onClick={() => setIsSettingsOpen(false)} className="text-zinc-400 hover:text-white cursor-pointer"><X size={24} /></button>
+              </div>
+              
+              <div className="space-y-6">
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-bold text-zinc-300">アダルト作品を表示する</label>
+                  <input type="checkbox" checked={showAdult} onChange={e => setShowAdult(e.target.checked)} className="accent-red-600 w-4 h-4 cursor-pointer" />
+                </div>
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-bold text-zinc-300">低評価・不完全データを表示</label>
+                  <input type="checkbox" checked={showIncomplete} onChange={e => setShowIncomplete(e.target.checked)} className="accent-red-600 w-4 h-4 cursor-pointer" />
+                </div>
+                <p className="text-[10px] text-zinc-500 mt-2">
+                  ※「低評価・不完全データを表示」をオフにすると、ポスター画像がない作品や投票数が極端に少ない作品（5未満）、ジャンル未設定の作品が非表示になります。
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* 吸い込みアニメーションオーバーレイ */}
         {flyingPoster && (
           <div 
@@ -1194,7 +1302,7 @@ export default function App() {
           />
         )}
 
-        {/* グローバル確認モーダル（チラつき防止のため詳細モーダルと分離・最前面表示） */}
+        {/* グローバル確認モーダル */}
         {showReviewConfirm && confirmMovie && (
           <div className="absolute inset-0 bg-black/80 backdrop-blur-md z-[110] flex items-center justify-center p-6 animate-in zoom-in">
             <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl max-w-xs w-full text-center space-y-4 shadow-2xl">
