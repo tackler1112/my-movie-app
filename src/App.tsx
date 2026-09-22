@@ -51,10 +51,12 @@ const FALLBACK_MOVIES: Record<string, any[]> = {
   ]
 };
 
-// --- ダブルスライダー（直接入力対応・判定拡大版） ---
+// --- ダブルスライダー（重なり対応・リアルタイム反映版） ---
 const DualRangeSlider = ({ min, max, step = 1, minVal, maxVal, onChange, unit = "" }: { min: number; max: number; step?: number; minVal: number; maxVal: number; onChange: (minV: number, maxV: number) => void; unit?: string; }) => {
   const [localMin, setLocalMin] = useState(minVal.toString());
   const [localMax, setLocalMax] = useState(maxVal.toString());
+  // 重なった際にどちらを最前面に出すか制御するステート
+  const [minThumbZ, setMinThumbZ] = useState(30); 
 
   useEffect(() => { setLocalMin(minVal.toString()); setLocalMax(maxVal.toString()); }, [minVal, maxVal]);
 
@@ -94,8 +96,20 @@ const DualRangeSlider = ({ min, max, step = 1, minVal, maxVal, onChange, unit = 
         <div className="absolute w-full h-2 bg-zinc-800 rounded-lg" />
         <div className="absolute h-2 bg-red-600 rounded-lg" style={{ left: `${minPercent}%`, width: `${maxPercent - minPercent}%` }} />
         
-        <input type="range" min={min} max={max} step={step} value={minVal} onChange={e => onChange(Math.min(Number(e.target.value), maxVal - step), maxVal)} className="absolute w-full h-2 opacity-0 custom-range-slider" style={{ zIndex: minVal > max - 10 ? 30 : 40 }} />
-        <input type="range" min={min} max={max} step={step} value={maxVal} onChange={e => onChange(minVal, Math.max(Number(e.target.value), minVal + step))} className="absolute w-full h-2 opacity-0 custom-range-slider" style={{ zIndex: maxVal < min + 10 ? 30 : 40 }} />
+        <input 
+          type="range" min={min} max={max} step={step} value={minVal} 
+          onChange={e => onChange(Math.min(Number(e.target.value), maxVal - step), maxVal)} 
+          onTouchStart={() => setMinThumbZ(40)} onMouseDown={() => setMinThumbZ(40)}
+          className="absolute w-full h-2 opacity-0 custom-range-slider" 
+          style={{ zIndex: minThumbZ }} 
+        />
+        <input 
+          type="range" min={min} max={max} step={step} value={maxVal} 
+          onChange={e => onChange(minVal, Math.max(Number(e.target.value), minVal + step))} 
+          onTouchStart={() => setMinThumbZ(30)} onMouseDown={() => setMinThumbZ(30)}
+          className="absolute w-full h-2 opacity-0 custom-range-slider" 
+          style={{ zIndex: minThumbZ === 40 ? 30 : 40 }} 
+        />
         
         <div className="absolute w-6 h-6 bg-white border-[3px] border-red-600 rounded-full -translate-x-1/2 pointer-events-none z-20 shadow-md" style={{ left: `${minPercent}%` }} />
         <div className="absolute w-6 h-6 bg-white border-[3px] border-red-600 rounded-full -translate-x-1/2 pointer-events-none z-20 shadow-md" style={{ left: `${maxPercent}%` }} />
@@ -154,12 +168,10 @@ export default function App() {
   const [tempFilters, setTempFilters] = useState<FilterState>(defaultFilters);
   const [appliedFilters, setAppliedFilters] = useState<FilterState>(defaultFilters);
   
-  // スライダー操作中もリアルタイムで activeFilters として適用
   const activeFilters = showFilters ? tempFilters : appliedFilters;
   const isFilterApplied = activeFilters.enableYear || activeFilters.enableRuntime || activeFilters.enableRating;
-  const [forceSearch, setForceSearch] = useState(false); // 空条件で「適用」を押した時の強制全件検索フラグ
+  const [forceSearch, setForceSearch] = useState(false); 
 
-  // 検索・ジャンル一覧の統合状態
   const [displayList, setDisplayList] = useState<any[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [sortOrder, setSortOrder] = useState<string>('release_desc');
@@ -167,7 +179,6 @@ export default function App() {
   const [apiPage, setApiPage] = useState(1);
   const [totalApiPages, setTotalApiPages] = useState(1);
   
-  // ジャンル別「すべて見る」用
   const [genreViewCategory, setGenreViewCategory] = useState<string | null>(null);
 
   const [editScore, setEditScore] = useState(0.0);
@@ -184,7 +195,10 @@ export default function App() {
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [selectedForDeletion, setSelectedForDeletion] = useState<Set<string>>(new Set());
   const [showBatchDeleteConfirm, setShowBatchDeleteConfirm] = useState(false);
-  const [showReviewConfirm, setShowReviewConfirm] = useState(false); // みた！押下後の確認モーダル
+  
+  // みた！押下後のグローバル確認モーダル用ステート（チラつき防止のため完全分離）
+  const [showReviewConfirm, setShowReviewConfirm] = useState(false); 
+  const [confirmMovie, setConfirmMovie] = useState<any | null>(null);
 
   const detailPosterRef = useRef<HTMLImageElement>(null);
   const [flyingPoster, setFlyingPoster] = useState<{ url: string; start: DOMRect; target: DOMRect } | null>(null);
@@ -308,7 +322,7 @@ export default function App() {
     }
   }, [currentViewingMovie, currentModalMode]);
 
-  // 並び替え処理ロジック（配列を渡してソートする）
+  // 並び替え処理ロジック（追加ブロックのみをソートし、既存の順番を維持する）
   const getSortedBlock = useCallback((movies: any[]) => {
     return [...movies].sort((a, b) => {
       if (sortOrder === 'release_desc') return new Date(b.releaseDate === '不明' || !b.releaseDate ? '1900-01-01' : b.releaseDate).getTime() - new Date(a.releaseDate === '不明' || !a.releaseDate ? '1900-01-01' : a.releaseDate).getTime();
@@ -321,19 +335,15 @@ export default function App() {
     });
   }, [sortOrder]);
 
-  // 検索 or ジャンル一覧の動的フェッチ（21件ページネーション制御）
+  // 検索・ジャンル一覧フェッチ (ドラッグ中もリアルタイム発火)
   useEffect(() => {
-    // 検索・ジャンルいずれも非アクティブならリセット
     if (!isSearchActive && activeTab !== 'genre_view') { setDisplayList([]); setDisplayCount(21); setIsSearching(false); return; }
 
     setIsSearching(true);
     const delayDebounceFn = setTimeout(async () => {
       try {
         if (!tmdbApiKey) return;
-
-        let baseList: any[] = [];
         
-        // --- データ取得先 URL の生成 ---
         let url = '';
         if (activeTab === 'genre_view' && genreViewCategory) {
           if (genreViewCategory === '公開中') {
@@ -356,9 +366,8 @@ export default function App() {
         const data = await res.json();
         setTotalApiPages(data.total_pages || 1);
         
-        // フィルタリング
         const basicFiltered = (data.results || []).filter((movie: any) => {
-          if (activeTab === 'genre_view') return true; // ジャンル一覧はフィルタ適用外
+          if (activeTab === 'genre_view') return true; 
           const releaseYear = parseInt(movie.release_date?.substring(0, 4) || '0');
           const vote = movie.vote_average || 0;
           let keep = true;
@@ -372,7 +381,6 @@ export default function App() {
           releaseDate: m.release_date || '不明', apiSynopsis: m.overview || '', voteAverage: m.vote_average ? m.vote_average.toFixed(1) : '0.0'
         }));
 
-        // 上映時間取得
         const resultsWithRuntime = await Promise.all(mapped.map(async (m: any) => {
           if (runtimeCache.has(m.id)) return { ...m, runtimeMinutes: runtimeCache.get(m.id) };
           try {
@@ -390,14 +398,13 @@ export default function App() {
           return m.runtimeMinutes >= activeFilters.runtimeMin && m.runtimeMinutes <= activeFilters.runtimeMax;
         });
 
-        // スクロール保持のための連結ソート
         if (apiPage === 1) {
           setDisplayList(getSortedBlock(fullyFiltered));
         } else {
           setDisplayList(prev => {
             const existingIds = new Set(prev.map(p => p.id));
             const newItems = fullyFiltered.filter(f => !existingIds.has(f.id));
-            // 新しいブロックだけをソートして、末尾に連結する（既存の順番は絶対に変わらない）
+            // 新規取得分のみをソートし末尾に連結。1〜21番など既存の順序は絶対に崩れない。
             return [...prev, ...getSortedBlock(newItems)];
           });
         }
@@ -407,14 +414,13 @@ export default function App() {
     return () => clearTimeout(delayDebounceFn);
   }, [searchTitle, selectedTags, activeFilters, forceSearch, activeTab, genreViewCategory, apiPage, sortOrder, getSortedBlock]);
 
-  // 表示件数（displayCount）がデータ数を超えたら、自動で次のAPIページを呼ぶ
+  // 自動次ページフェッチ (表示件数に満たない場合)
   useEffect(() => {
-    if (displayCount > displayList.length && apiPage < totalApiPages) {
+    if (!isSearching && displayCount > displayList.length && apiPage < totalApiPages) {
       setApiPage(prev => prev + 1);
     }
-  }, [displayCount, displayList.length, apiPage, totalApiPages]);
+  }, [displayCount, displayList.length, apiPage, totalApiPages, isSearching]);
 
-  // ソート条件が変わったら、最初から読み込み直し（1ページ目から全ソート適用のため）
   useEffect(() => {
     setApiPage(1);
     setDisplayCount(21);
@@ -425,7 +431,6 @@ export default function App() {
     setShowFilters(false);
     setApiPage(1);
     setDisplayCount(21);
-    // 空条件で適用を押した場合は全件検索モードをオン
     if (searchTitle === '' && selectedTags.length === 0 && !tempFilters.enableYear && !tempFilters.enableRuntime && !tempFilters.enableRating) {
       setForceSearch(true);
     }
@@ -506,29 +511,24 @@ export default function App() {
     setShowBatchDeleteConfirm(false);
   };
 
-  // 吸い込みアニメーション
-  const triggerFlyAnimation = (targetTab: 'watchlist' | 'watched', callback: () => void) => {
+  // 吸い込みアニメーションの起動
+  const triggerFlyAnimation = (targetTab: 'watchlist' | 'watched', movieUrl: string, onStart: () => void) => {
     const targetEl = document.getElementById(`tab-btn-${targetTab}`);
-    if (detailPosterRef.current && targetEl) {
-      const startRect = detailPosterRef.current.getBoundingClientRect();
+    const startRect = detailPosterRef.current?.getBoundingClientRect();
+    
+    if (startRect && targetEl) {
       const targetRect = targetEl.getBoundingClientRect();
-      setFlyingPoster({
-        url: currentViewingMovie?.posterUrl || '',
-        start: startRect,
-        target: targetRect
-      });
-      setTimeout(() => {
-        setFlyingPoster(null);
-        callback();
-      }, 900);
+      setFlyingPoster({ url: movieUrl, start: startRect, target: targetRect });
+      onStart(); // アニメ開始と同時にモーダル破棄や確認画面表示を実行
+      setTimeout(() => { setFlyingPoster(null); }, 900);
     } else {
-      callback();
+      onStart();
     }
   };
 
   const handleAddWatchlist = async (movie: any) => {
-    triggerFlyAnimation('watchlist', async () => {
-      updateModalState(null);
+    triggerFlyAnimation('watchlist', movie.posterUrl, async () => {
+      updateModalState(null); // 詳細画面を即座に閉じる
       const newEntry = { movieId: movie.id, movieData: movie, status: 'watchlist', updatedAt: Date.now() };
       setMyCollection(prev => [...prev.filter(item => item.movieId !== movie.id), newEntry]);
       await saveToSupabase(newEntry);
@@ -537,33 +537,44 @@ export default function App() {
 
   const handleQuickWatch = async () => {
     if (!currentViewingMovie) return;
-    triggerFlyAnimation('watched', async () => {
-      setShowReviewConfirm(true); // アニメーション後に確認ダイアログを表示
+    setConfirmMovie(currentViewingMovie);
+    
+    triggerFlyAnimation('watched', currentViewingMovie.posterUrl, () => {
+      // アニメーション開始と『同時』に詳細画面を即座に破棄し、グローバルの確認モーダルを起動
+      updateModalState(null);
+      setShowReviewConfirm(true); 
     });
   };
 
   const confirmQuickWatch = async (doReview: boolean) => {
-    if (!currentViewingMovie) return;
+    if (!confirmMovie) return;
+    
+    // モーダルを即座に閉じる（背景はすでに一覧画面なのでチラつかない）
     setShowReviewConfirm(false);
-    const existing = getCollectionData(currentViewingMovie.id);
+    
+    const existing = getCollectionData(confirmMovie.id);
     const newEntry = {
-      movieId: currentViewingMovie.id, movieData: currentViewingMovie, status: 'watched',
+      movieId: confirmMovie.id, movieData: confirmMovie, status: 'watched',
       score: existing?.score || 0.0,
       aiContent: existing?.aiContent || '', myReview: existing?.myReview || '', updatedAt: Date.now()
     };
     
-    setMyCollection(prev => [...prev.filter(item => item.movieId !== currentViewingMovie.id), newEntry]);
-    await saveToSupabase(newEntry);
+    setMyCollection(prev => [...prev.filter(item => item.movieId !== confirmMovie.id), newEntry]);
+    saveToSupabase(newEntry);
 
     if (doReview) {
-      // 鑑賞済みタブへ移行し、レビューモーダルを開く
+      // レビューする場合は、「鑑賞済み」タブに切り替え、みたいタブをリセットした上でレビュー画面を開く
       setActiveTab('watched');
-      setTabStates(prev => ({ ...prev, watchlist: { modalMode: null, viewingMovie: null } })); // みたいタブをリセット
-      openReviewModal(currentViewingMovie);
-    } else {
-      // そのまま詳細を閉じてみたいリストへ戻る
-      updateModalState(null);
+      setTabStates(prev => ({ 
+        ...prev, 
+        watchlist: { modalMode: null, viewingMovie: null },
+        watched: { modalMode: 'review', viewingMovie: confirmMovie } 
+      }));
+      setEditScore(existing?.score || 0.0);
+      setEditAiContent(existing?.aiContent ?? '');
+      setEditMyReview(existing?.myReview ?? '');
     }
+    setConfirmMovie(null);
   };
 
   const handleSaveReview = async () => {
@@ -622,7 +633,6 @@ export default function App() {
     const face = getFaceRating(currentScore);
     const canDelete = status !== 'none' && (fromTab === 'watchlist' || fromTab === 'watched');
 
-    // 「レビューする」か「修正する」かの判定
     const hasReviewData = currentScore > 0 || !!collectionData?.aiContent || !!collectionData?.myReview;
 
     return (
@@ -646,21 +656,6 @@ export default function App() {
               <div className="flex gap-3 pt-2">
                 <button onClick={() => updateModalState('detail')} className="flex-1 py-2.5 bg-zinc-800 text-white rounded-lg text-xs font-bold cursor-pointer">いいえ</button>
                 <button onClick={() => handleDeleteFromCollection(currentViewingMovie.id)} className="flex-1 py-2.5 bg-red-600 text-white rounded-lg text-xs font-bold cursor-pointer">はい</button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* みた！押下後のレビュー確認モーダル */}
-        {showReviewConfirm && (
-          <div className="absolute inset-0 bg-black/80 backdrop-blur-md z-[80] flex items-center justify-center p-6">
-            <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl max-w-xs w-full text-center space-y-4 shadow-2xl animate-in zoom-in">
-              <CheckCircle2 size={48} className="mx-auto text-green-500 mb-2" />
-              <h3 className="text-lg font-bold text-white">鑑賞済みに登録しました！</h3>
-              <p className="text-xs text-zinc-400">今すぐレビューを記録しますか？</p>
-              <div className="flex gap-3 pt-2">
-                <button onClick={() => confirmQuickWatch(false)} className="flex-1 py-2.5 bg-zinc-800 text-white rounded-lg text-xs font-bold cursor-pointer hover:bg-zinc-700 transition">あとで</button>
-                <button onClick={() => confirmQuickWatch(true)} className="flex-1 py-2.5 bg-red-600 text-white rounded-lg text-xs font-bold cursor-pointer hover:bg-red-700 transition shadow-[0_0_15px_rgba(220,38,38,0.4)]">レビューする</button>
               </div>
             </div>
           </div>
@@ -836,8 +831,6 @@ export default function App() {
 
   const renderHome = () => {
     const recommendedList = homeCategoriesData['おすすめ'] || [];
-    
-    // 現在の displayCount 分だけ切り出して表示
     const visibleSearchResults = displayList.slice(0, displayCount);
     
     const unselectedGenres = apiGenres.filter(g => !selectedTags.includes(g.id.toString()));
@@ -1191,7 +1184,7 @@ export default function App() {
         {/* 吸い込みアニメーションオーバーレイ */}
         {flyingPoster && (
           <div 
-            className="fixed z-[999] pointer-events-none rounded-md overflow-hidden shadow-2xl"
+            className="fixed z-[105] pointer-events-none rounded-md overflow-hidden shadow-2xl"
             style={{
               backgroundImage: `url(${flyingPoster.url})`,
               backgroundSize: 'cover',
@@ -1199,6 +1192,21 @@ export default function App() {
               animation: 'flyToTab 0.9s cubic-bezier(0.25, 1, 0.5, 1) forwards'
             }}
           />
+        )}
+
+        {/* グローバル確認モーダル（チラつき防止のため詳細モーダルと分離・最前面表示） */}
+        {showReviewConfirm && confirmMovie && (
+          <div className="absolute inset-0 bg-black/80 backdrop-blur-md z-[110] flex items-center justify-center p-6 animate-in zoom-in">
+            <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl max-w-xs w-full text-center space-y-4 shadow-2xl">
+              <CheckCircle2 size={48} className="mx-auto text-green-500 mb-2" />
+              <h3 className="text-lg font-bold text-white">鑑賞済みに登録しました！</h3>
+              <p className="text-xs text-zinc-400">今すぐレビューを記録しますか？</p>
+              <div className="flex gap-3 pt-2">
+                <button onClick={() => confirmQuickWatch(false)} className="flex-1 py-2.5 bg-zinc-800 text-white rounded-lg text-xs font-bold cursor-pointer hover:bg-zinc-700 transition">あとで</button>
+                <button onClick={() => confirmQuickWatch(true)} className="flex-1 py-2.5 bg-red-600 text-white rounded-lg text-xs font-bold cursor-pointer hover:bg-red-700 transition shadow-[0_0_15px_rgba(220,38,38,0.4)]">レビューする</button>
+              </div>
+            </div>
+          </div>
         )}
 
         {/* メインコンテンツエリア */}
@@ -1262,22 +1270,22 @@ export default function App() {
           to { opacity: 1; transform: scale(1); }
         }
         
-        /* スライダーのタッチ判定を拡大 */
+        /* スライダーのタッチ判定を拡大 (40px) */
         input[type=range].custom-range-slider {
           pointer-events: none;
         }
         input[type=range].custom-range-slider::-webkit-slider-thumb {
           pointer-events: auto;
           -webkit-appearance: none;
-          width: 32px;
-          height: 32px;
+          width: 40px;
+          height: 40px;
           border-radius: 50%;
           cursor: pointer;
         }
         input[type=range].custom-range-slider::-moz-range-thumb {
           pointer-events: auto;
-          width: 32px;
-          height: 32px;
+          width: 40px;
+          height: 40px;
           border-radius: 50%;
           cursor: pointer;
           border: none;
