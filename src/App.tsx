@@ -131,6 +131,7 @@ const defaultFilters: FilterState = {
 };
 
 const runtimeCache = new Map<string, number>();
+const castCheckCache = new Map<string, boolean>(); // キャスト有無キャッシュ
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('home');
@@ -286,7 +287,6 @@ export default function App() {
       const dd = String(today.getDate()).padStart(2, '0');
       const todayStr = `${yyyy}-${mm}-${dd}`;
       
-      // API側フィルター（ホーム画面用）
       const commonFilters = `&include_adult=${showAdult ? 'true' : 'false'}` 
                           + (!showIncomplete ? '&vote_count.gte=3' : '')
                           + `&primary_release_date.lte=${todayStr}`;
@@ -313,6 +313,31 @@ export default function App() {
               }
               return true;
             });
+
+            // 公開中タブのトップカルーセル用プレフィルタ（キャストチェックも考慮）
+            if (cat === '公開中') {
+              const checkedResults = await Promise.all(results.map(async (m: any) => {
+                let hasCast = true;
+                if (!showIncomplete) {
+                  if (m.vote_count < 3) {
+                    if (castCheckCache.has(m.id.toString())) {
+                      hasCast = castCheckCache.get(m.id.toString())!;
+                    } else {
+                      try {
+                        const credRes = await fetch(`https://api.themoviedb.org/3/movie/${m.id}/credits?api_key=${tmdbApiKey}`);
+                        const credData = await credRes.json();
+                        hasCast = credData.cast && credData.cast.length > 0;
+                        castCheckCache.set(m.id.toString(), hasCast);
+                      } catch(e) { hasCast = true; }
+                    }
+                  }
+                }
+                const isValid = movie.poster_path && movie.genre_ids && movie.genre_ids.length > 0 && !(movie.vote_count < 3 && !hasCast);
+                return isValid ? m : null;
+              }));
+              results = checkedResults.filter(Boolean);
+            }
+
             if (cat !== '公開中') results = results.sort(() => Math.random() - 0.5);
             newCategoryData[cat] = results.map((movie: any) => ({
               id: movie.id.toString(), title: movie.title || movie.original_title, genre: cat,
@@ -399,16 +424,15 @@ export default function App() {
     if (sortOrder === 'runtime_desc') return [...movies].sort((a, b) => (runtimeCache.get(b.id) ?? b.runtimeMinutes ?? 0) - (runtimeCache.get(a.id) ?? a.runtimeMinutes ?? 0));
     if (sortOrder === 'runtime_asc') return [...movies].sort((a, b) => (runtimeCache.get(a.id) ?? a.runtimeMinutes ?? 0) - (runtimeCache.get(b.id) ?? b.runtimeMinutes ?? 0));
     
-    if (searchTitle !== '') {
-      if (sortOrder === 'release_desc') return [...movies].sort((a, b) => new Date(b.releaseDate === '不明' || !b.releaseDate ? '1900-01-01' : b.releaseDate).getTime() - new Date(a.releaseDate === '不明' || !a.releaseDate ? '1900-01-01' : a.releaseDate).getTime());
-      if (sortOrder === 'release_asc') return [...movies].sort((a, b) => new Date(a.releaseDate === '不明' || !a.releaseDate ? '1900-01-01' : a.releaseDate).getTime() - new Date(b.releaseDate === '不明' || !b.releaseDate ? '1900-01-01' : b.releaseDate).getTime());
-      if (sortOrder === 'rating_desc') return [...movies].sort((a, b) => parseFloat(b.voteAverage || '0') - parseFloat(a.voteAverage || '0'));
-      if (sortOrder === 'rating_asc') return [...movies].sort((a, b) => parseFloat(a.voteAverage || '0') - parseFloat(b.voteAverage || '0'));
-    }
-    return movies;
-  }, [sortOrder, searchTitle]);
+    if (sortOrder === 'release_desc') return [...movies].sort((a, b) => new Date(b.releaseDate === '不明' || !b.releaseDate ? '1900-01-01' : b.releaseDate).getTime() - new Date(a.releaseDate === '不明' || !a.releaseDate ? '1900-01-01' : a.releaseDate).getTime());
+    if (sortOrder === 'release_asc') return [...movies].sort((a, b) => new Date(a.releaseDate === '不明' || !a.releaseDate ? '1900-01-01' : a.releaseDate).getTime() - new Date(b.releaseDate === '不明' || !b.releaseDate ? '1900-01-01' : b.releaseDate).getTime());
+    if (sortOrder === 'rating_desc') return [...movies].sort((a, b) => parseFloat(b.voteAverage || '0') - parseFloat(a.voteAverage || '0'));
+    if (sortOrder === 'rating_asc') return [...movies].sort((a, b) => parseFloat(a.voteAverage || '0') - parseFloat(b.voteAverage || '0'));
 
-  // 一括検索・確実なフェッチ処理（APIフィルター強化版）
+    return movies;
+  }, [sortOrder]);
+
+  // 一括検索・確実なフェッチ処理（タグ検索内文字検索・公開中特殊フィルタ対応版）
   useEffect(() => {
     if (!isSearchActive && activeTab !== 'genre_view') { setDisplayList([]); setIsSearching(false); return; }
 
@@ -433,17 +457,17 @@ export default function App() {
             return `https://api.themoviedb.org/3/movie/now_playing?api_key=${tmdbApiKey}&language=ja-JP&region=JP&page=${page}`;
           }
           
-          if (isSearchActive && searchTitle !== '') {
-            return `https://api.themoviedb.org/3/search/movie?api_key=${tmdbApiKey}&language=ja-JP&query=${encodeURIComponent(searchTitle)}&page=${page}&include_adult=${showAdult ? 'true' : 'false'}`;
+          // タグ選択中＋文字検索、または通常の文字検索
+          if (searchTitle !== '') {
+            let searchUrl = `https://api.themoviedb.org/3/search/movie?api_key=${tmdbApiKey}&language=ja-JP&query=${encodeURIComponent(searchTitle)}&page=${page}&include_adult=${showAdult ? 'true' : 'false'}`;
+            return searchUrl;
           }
 
           let url = `https://api.themoviedb.org/3/discover/movie?api_key=${tmdbApiKey}&language=ja-JP&sort_by=${sortParam}&page=${page}`;
           
-          // API側フィルター（可能な限りAPI側で弾いて未来日とゴミデータを排除）
           url += `&include_adult=${showAdult ? 'true' : 'false'}`;
           if (!showIncomplete) url += `&vote_count.gte=3`;
 
-          // 未来日除外ロジック（API側）
           let maxDateStr = todayStr;
           if (isSearchActive && appliedFilters.enableYear) {
              const filterMaxDate = `${appliedFilters.yearMax}-12-31`;
@@ -469,6 +493,7 @@ export default function App() {
         let maxTotalPages = 1;
         let newNextApiPage = apiPage;
         
+        // 公開中の場合は初回5ページ(最大100件)を一気に取ってソート可能にする
         if (isNowPlaying && apiPage === 1) {
           const pagesToFetch = [1, 2, 3, 4, 5];
           const resArray = await Promise.all(pagesToFetch.map(p => fetch(buildUrl(p)).catch(()=>null)));
@@ -484,19 +509,16 @@ export default function App() {
           let currentApiPage = apiPage;
           const targetCount = 60; 
           
-          // APIで未来日を弾いているためループ回数は少なく済むが、念のため20回上限とする
           while (fetchedMovies.length < targetCount && loopCount < 20) {
             const res = await fetch(buildUrl(currentApiPage));
             const data = await res.json();
             if (data.total_pages) maxTotalPages = data.total_pages;
             
-            if (currentApiPage > maxTotalPages) break; // ページ上限を超えたら抜ける
+            if (currentApiPage > maxTotalPages) break;
 
             if (data.results && data.results.length > 0) {
               const filtered = data.results.filter((movie: any) => {
-                // 未来日とリリース日未定をフロントでも確実に弾く
                 if (!movie.release_date || movie.release_date > todayStr) return false;
-
                 if (!showAdult && movie.adult) return false;
                 if (!showIncomplete) {
                   if (!movie.poster_path) return false;
@@ -506,10 +528,8 @@ export default function App() {
                 const releaseYear = parseInt(movie.release_date.substring(0, 4) || '0');
                 const vote = movie.vote_average || 0;
                 let keep = true;
-                if (searchTitle !== '' || searchPerson !== null || selectedTags.length > 0 || isFilterApplied) {
-                  if (appliedFilters.enableYear) keep = keep && (releaseYear >= appliedFilters.yearMin && releaseYear <= appliedFilters.yearMax);
-                  if (appliedFilters.enableRating) keep = keep && (vote >= appliedFilters.ratingMin && vote <= appliedFilters.ratingMax);
-                }
+                if (appliedFilters.enableYear) keep = keep && (releaseYear >= appliedFilters.yearMin && releaseYear <= appliedFilters.yearMax);
+                if (appliedFilters.enableRating) keep = keep && (vote >= appliedFilters.ratingMin && vote <= appliedFilters.ratingMax);
                 return keep;
               });
               fetchedMovies.push(...filtered);
@@ -525,11 +545,43 @@ export default function App() {
         setTotalApiPages(maxTotalPages);
         setNextApiPage(newNextApiPage);
 
-        const uniqueMap = new Map();
+        // 重複排除
+        let uniqueMap = new Map();
         fetchedMovies.forEach(m => {
           if (!uniqueMap.has(m.id)) uniqueMap.set(m.id, m);
         });
-        const uniqueResults = Array.from(uniqueMap.values());
+        let uniqueResults = Array.from(uniqueMap.values());
+
+        // タグ選択中で検索バーに文字が入力されている場合のフロント補助フィルタ（指定タグを含んでいるか）
+        if (selectedTags.length > 0 && searchTitle !== '') {
+          uniqueResults = uniqueResults.filter((m: any) => {
+            if (!m.genre_ids) return false;
+            return selectedTags.every(tId => m.genre_ids.includes(Number(tId)));
+          });
+        }
+
+        // 「公開中」専用の特殊ゴミデータフィルタ（ポスターなし or タグなし or (投票数3未満かつキャスト空欄)）
+        if (isNowPlaying && !showIncomplete) {
+          const checkedPublicMovies = await Promise.all(uniqueResults.map(async (m: any) => {
+            if (!m.poster_path || !m.genre_ids || m.genre_ids.length === 0) return null;
+            if (m.vote_count < 3) {
+              let hasCast = true;
+              if (castCheckCache.has(m.id.toString())) {
+                hasCast = castCheckCache.get(m.id.toString())!;
+              } else {
+                try {
+                  const credRes = await fetch(`https://api.themoviedb.org/3/movie/${m.id}/credits?api_key=${tmdbApiKey}`);
+                  const credData = await credRes.json();
+                  hasCast = credData.cast && credData.cast.length > 0;
+                  castCheckCache.set(m.id.toString(), hasCast);
+                } catch(e) { hasCast = true; }
+              }
+              if (!hasCast) return null;
+            }
+            return m;
+          }));
+          uniqueResults = checkedPublicMovies.filter(Boolean);
+        }
 
         const mapped = uniqueResults.map((m: any) => ({
           id: m.id.toString(), title: m.title || m.original_title, posterUrl: m.poster_path ? `https://image.tmdb.org/t/p/w500${m.poster_path}` : '',
@@ -557,12 +609,12 @@ export default function App() {
         }
 
         if (apiPage === 1) {
-          setDisplayList(isNormalGenre ? fullyFiltered : getSortedBlock(fullyFiltered));
+          setDisplayList(getSortedBlock(fullyFiltered));
         } else {
           setDisplayList(prev => {
             const existingIds = new Set(prev.map(p => p.id));
             const newItems = fullyFiltered.filter(f => !existingIds.has(f.id));
-            return [...prev, ...(isNormalGenre ? newItems : getSortedBlock(newItems))];
+            return [...prev, ...getSortedBlock(newItems)];
           });
         }
 
@@ -1245,16 +1297,14 @@ export default function App() {
             <button onClick={() => { setActiveTab('home'); setSortOrder('release_desc'); setDisplayList([]); }} className="text-zinc-400 hover:text-white p-1 cursor-pointer"><ArrowLeft size={22} /></button>
             <h2 className="text-base font-bold text-white">{genreViewCategory}</h2>
           </div>
-          {genreViewCategory === '公開中' && (
-            <select value={sortOrder} onChange={e => setSortOrder(e.target.value)} className="bg-zinc-900 border border-zinc-800 text-zinc-200 text-[11px] font-medium rounded-lg px-2 py-1 focus:outline-none cursor-pointer">
-              <option value="release_desc">公開日が新しい順</option>
-              <option value="release_asc">公開日が古い順</option>
-              <option value="runtime_desc">上映時間が長い順</option>
-              <option value="runtime_asc">上映時間が短い順</option>
-              <option value="rating_desc">評価が高い順</option>
-              <option value="rating_asc">評価が低い順</option>
-            </select>
-          )}
+          <select value={sortOrder} onChange={e => setSortOrder(e.target.value)} className="bg-zinc-900 border border-zinc-800 text-zinc-200 text-[11px] font-medium rounded-lg px-2 py-1 focus:outline-none cursor-pointer">
+            <option value="release_desc">公開日が新しい順</option>
+            <option value="release_asc">公開日が古い順</option>
+            <option value="runtime_desc">上映時間が長い順</option>
+            <option value="runtime_asc">上映時間が短い順</option>
+            <option value="rating_desc">評価が高い順</option>
+            <option value="rating_asc">評価が低い順</option>
+          </select>
         </header>
         <div className="flex-1 overflow-y-auto p-4">
           {visibleGenreList.length > 0 ? (
@@ -1376,7 +1426,7 @@ export default function App() {
     <div className="bg-black h-[100dvh] w-full flex justify-center font-sans selection:bg-red-900/30 text-zinc-200 overflow-hidden app-wrapper">
       <div className="w-full max-w-md h-full bg-[#141414] shadow-2xl relative border-x border-zinc-900 flex flex-col overflow-hidden">
 
-        {/* ハンバーガーメニュー (マットブラック基調の美しいスライドパネル) */}
+        {/* ハンバーガーメニュー */}
         <div 
           ref={menuRef}
           className={`absolute top-0 right-0 bottom-0 w-64 bg-[#161616] border-l border-zinc-800/80 shadow-2xl z-[130] flex flex-col transition-transform duration-300 ease-in-out pointer-events-auto ${isMenuOpen ? 'translate-x-0' : 'translate-x-full'}`}
