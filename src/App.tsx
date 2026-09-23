@@ -279,17 +279,18 @@ export default function App() {
     const diffX = touchEndX - touchStartX.current;
     const diffY = touchEndY - touchStartY.current;
 
-    // 画面左端からのフリックのみ有効にする
-    if (touchStartX.current > 50) return;
+    // 画面左端から100px以内からのスタートのみ有効にする（感度アップ）
+    if (touchStartX.current > 100) return;
 
-    if (diffX > 80 && Math.abs(diffY) < 50) {
+    // 右へ50px以上フリック、かつ上下のブレが60px未満なら反応（誤爆防止と軽快さの両立）
+    if (diffX > 50 && Math.abs(diffY) < 60) {
       setSwipeOutTarget(type);
       setTimeout(() => {
         if (type === 'detail') updateModalState(null);
         if (type === 'genre') { setActiveTab('home'); setDisplayList([]); }
         if (type === 'search') resetSearch();
         setSwipeOutTarget(null);
-      }, 250);
+      }, 250); // アニメーションの0.25秒と完全に同期
     }
   };
 
@@ -442,9 +443,43 @@ export default function App() {
         
         const collection = detail.belongs_to_collection ? { id: detail.belongs_to_collection.id, name: detail.belongs_to_collection.name } : null;
 
-        const streamingServices = (watch.results?.JP?.flatrate || []).map((p: any) => ({
-          name: p.provider_name, logo: `https://image.tmdb.org/t/p/w90${p.logo_path}`, url: watch.results?.JP?.link || 'https://www.themoviedb.org/'
-        }));
+        const encodedTitle = encodeURIComponent(currentViewingMovie.title);
+        
+        const streamingServices = (watch.results?.JP?.flatrate || []).map((p: any) => {
+          let customUrl = p.link || 'https://www.themoviedb.org/';
+          
+          // 各サービスの検索URL（スマホの場合はアプリがインストールされていれば自動で開くことが多いです）
+          switch (p.provider_name) {
+            case 'Netflix':
+              customUrl = `https://www.netflix.com/search?q=${encodedTitle}`;
+              break;
+            case 'Amazon Prime Video':
+              customUrl = `https://www.amazon.co.jp/s?k=${encodedTitle}&i=instant-video`;
+              break;
+            case 'U-NEXT':
+              customUrl = `https://video.unext.jp/freeword?query=${encodedTitle}`;
+              break;
+            case 'Hulu':
+              customUrl = `https://www.hulu.jp/search?q=${encodedTitle}`;
+              break;
+            case 'Disney Plus':
+              customUrl = `https://www.disneyplus.com/search?q=${encodedTitle}`;
+              break;
+            case 'Apple TV Plus':
+              customUrl = `https://tv.apple.com/jp/search?q=${encodedTitle}`;
+              break;
+            default:
+              // その他のサービスの場合は、Google検索（映画名 ＋ サービス名）に飛ばす
+              customUrl = `https://www.google.com/search?q=${encodedTitle}+${encodeURIComponent(p.provider_name)}`;
+              break;
+          }
+
+          return {
+            name: p.provider_name, 
+            logo: `https://image.tmdb.org/t/p/w92${p.logo_path}`, // w90から公式のw92へ変更
+            url: customUrl
+          };
+        });
 
         setMovieExtraDetails({ 
           runtime, runtimeMinutes, directorObj, castObjs, productionCompanies, streamingServices, collection,
@@ -1536,6 +1571,11 @@ export default function App() {
 
   return (
     <div className="bg-[#141414] h-[100dvh] w-full flex justify-center font-sans selection:bg-red-900/30 text-zinc-200 overflow-hidden app-wrapper">
+  
+      <div className="landscape-overlay">
+        <p>端末を縦向きにしてご利用ください</p>
+      </div>
+
       <div className="w-full max-w-md h-full bg-[#141414] shadow-2xl relative flex flex-col overflow-hidden">
 
         {/* ハンバーガーメニュー */}
@@ -1718,6 +1758,30 @@ export default function App() {
             border-radius: 50%;
           }
         }
+
+        .landscape-overlay {
+          display: none;
+        }
+        @media screen and (orientation: landscape) {
+          .landscape-overlay {
+            display: flex;
+            position: fixed;
+            inset: 0;
+            background-color: #000;
+            color: #fff;
+            z-index: 99999;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 14px;
+            letter-spacing: 0.05em;
+          }
+          /* カバー以外の要素を完全に隠す */
+          .app-wrapper > div:not(.landscape-overlay) {
+            display: none !important;
+          }
+        }
+
       `}} />
     </div>
   );
