@@ -970,9 +970,11 @@ export default function App() {
     const hasReviewData = currentScore > 0 || !!collectionData?.aiContent || !!collectionData?.myReview;
 
     return (
-      <div className={`absolute inset-0 bg-[#141414] z-[60] flex flex-col ${swipeOutTarget === 'detail' ? 'slide-out-right' : 'animate-in slide-in-from-bottom-10 fade-in duration-300'}`}
+      <div className="absolute inset-0 bg-[#141414] z-[60] flex flex-col animate-in slide-in-from-bottom-10 fade-in duration-300"
            onTouchStart={handleTouchStart} onTouchEnd={(e) => handleTouchEnd(e, 'detail')}>
         {renderAppHeader()}
+        
+        {/* ヘッダー部分はスライドさせず固定 */}
         <header className="flex items-center justify-between p-4 bg-gradient-to-b from-black/80 to-transparent absolute top-[49px] left-0 right-0 z-50 pointer-events-none">
           <button onClick={() => updateModalState(null)} className="pointer-events-auto p-2.5 bg-black/60 backdrop-blur-md text-white rounded-full hover:bg-black/80 transition cursor-pointer">
             <ArrowLeft size={20} />
@@ -996,144 +998,148 @@ export default function App() {
           </div>
         )}
 
-        <div className="flex-1 overflow-y-auto pb-28">
-          <div className="relative w-full aspect-[2/3] max-h-[50vh] bg-zinc-900 flex justify-center overflow-hidden">
-            <div className="absolute inset-0 bg-cover bg-center blur-xl opacity-40 scale-110" style={{ backgroundImage: `url(${currentViewingMovie.posterUrl})` }} />
-            {currentViewingMovie.posterUrl ? <img ref={detailPosterRef} src={currentViewingMovie.posterUrl} className="relative h-full w-full object-cover shadow-2xl" /> : <div className="relative h-full flex items-center justify-center text-zinc-600">No Image</div>}
-            <div className="absolute bottom-0 left-0 right-0 h-40 bg-gradient-to-t from-[#141414] via-[#141414]/80 to-transparent" />
-          </div>
-
-          <div className="px-5 -mt-6 relative z-10 space-y-6">
-            <div>
-              <h2 className="text-2xl font-extrabold text-white leading-tight mb-2">{currentViewingMovie.title}</h2>
-              <div className="flex flex-wrap items-center gap-2 text-xs font-medium text-zinc-300">
-                <span className="flex items-center gap-1 text-yellow-500 font-bold bg-yellow-500/10 px-2 py-0.5 rounded border border-yellow-500/20"><Star size={12} className="fill-yellow-500" /> {currentViewingMovie.voteAverage}</span>
-                <span className="flex items-center gap-1 bg-zinc-800 px-2 py-0.5 rounded text-zinc-300"><Calendar size={12} /> {currentViewingMovie.releaseDate}</span>
-                {movieExtraDetails?.runtime && <span className="bg-zinc-800 px-2 py-0.5 rounded text-zinc-300"><Clock size={12} className="inline mr-1" />{movieExtraDetails.runtime}</span>}
-              </div>
+        {/* ↓↓↓ ここからスライドの対象（bg-[#141414] で背景を不透明化） ↓↓↓ */}
+        <div className={`flex-1 flex flex-col overflow-hidden relative bg-[#141414] ${swipeOutTarget === 'detail' ? 'slide-out-right' : ''}`}>
+          <div className="flex-1 overflow-y-auto pb-28">
+            <div className="relative w-full aspect-[2/3] max-h-[50vh] bg-zinc-900 flex justify-center overflow-hidden">
+              <div className="absolute inset-0 bg-cover bg-center blur-xl opacity-40 scale-110" style={{ backgroundImage: `url(${currentViewingMovie.posterUrl})` }} />
+              {currentViewingMovie.posterUrl ? <img ref={detailPosterRef} src={currentViewingMovie.posterUrl} className="relative h-full w-full object-cover shadow-2xl" /> : <div className="relative h-full flex items-center justify-center text-zinc-600">No Image</div>}
+              <div className="absolute bottom-0 left-0 right-0 h-40 bg-gradient-to-t from-[#141414] via-[#141414]/80 to-transparent" />
             </div>
 
-            {status === 'watched' && face && (
-              <div className="flex items-center gap-4 bg-zinc-900/80 p-4 rounded-xl border border-zinc-800">
-                <face.icon size={36} color={face.color} strokeWidth={1.2} />
-                <div>
-                  <div className="text-xs font-bold uppercase tracking-wider" style={{ color: face.color }}>{face.label}</div>
-                  <div className="text-lg font-extrabold text-white">{currentScore.toFixed(1)}<span className="text-xs text-zinc-500"> /10.0</span></div>
+            <div className="px-5 -mt-6 relative z-10 space-y-6">
+              <div>
+                <h2 className="text-2xl font-extrabold text-white leading-tight mb-2">{currentViewingMovie.title}</h2>
+                <div className="flex flex-wrap items-center gap-2 text-xs font-medium text-zinc-300">
+                  <span className="flex items-center gap-1 text-yellow-500 font-bold bg-yellow-500/10 px-2 py-0.5 rounded border border-yellow-500/20"><Star size={12} className="fill-yellow-500" /> {currentViewingMovie.voteAverage}</span>
+                  <span className="flex items-center gap-1 bg-zinc-800 px-2 py-0.5 rounded text-zinc-300"><Calendar size={12} /> {currentViewingMovie.releaseDate}</span>
+                  {movieExtraDetails?.runtime && <span className="bg-zinc-800 px-2 py-0.5 rounded text-zinc-300"><Clock size={12} className="inline mr-1" />{movieExtraDetails.runtime}</span>}
                 </div>
               </div>
-            )}
 
-            <p className="text-xs text-zinc-300 leading-relaxed font-medium">{currentViewingMovie.apiSynopsis}</p>
-
-            {status === 'watched' && (collectionData?.aiContent || collectionData?.myReview) && (
-              <div className="space-y-4 pt-4 border-t border-zinc-800/80">
-                {collectionData?.aiContent && <div className="bg-zinc-900/60 p-4 rounded-xl border border-zinc-800 space-y-2"><h4 className="text-xs font-bold text-zinc-400">内容メモ</h4><p className="text-xs text-zinc-300 whitespace-pre-wrap leading-relaxed">{collectionData.aiContent}</p></div>}
-                {collectionData?.myReview && <div className="bg-zinc-900/60 p-4 rounded-xl border border-zinc-800 space-y-2"><h4 className="text-xs font-bold text-zinc-400">自分の感想</h4><p className="text-xs text-zinc-300 whitespace-pre-wrap leading-relaxed">{collectionData.myReview}</p></div>}
-              </div>
-            )}
-
-            <div className="space-y-4 pt-4 border-t border-zinc-800/80 text-xs">
-              {isExtraLoading ? (
-                <div className="flex items-center justify-center py-4 text-zinc-500 gap-2"><Loader2 size={16} className="animate-spin text-red-500" /></div>
-              ) : movieExtraDetails ? (
-                <div className="space-y-4">
-                  <div className="grid grid-cols-2 gap-2 bg-zinc-900/50 p-3 rounded-lg border border-zinc-800">
-                    <div>
-                      <span className="text-zinc-500 block mb-1">監督</span>
-                      {movieExtraDetails.directorObj ? (
-                        <button onClick={() => handlePersonSearch(movieExtraDetails.directorObj)} className="text-zinc-200 font-bold hover:underline cursor-pointer">{movieExtraDetails.directorObj.name}</button>
-                      ) : <span className="text-zinc-200 font-bold">不明</span>}
-                    </div>
-                    <div>
-                      <span className="text-zinc-500 block mb-1">キャスト</span>
-                      <div className="flex flex-col items-start gap-1">
-                        {movieExtraDetails.castObjs.map((c: any) => (
-                          <button key={c.id} onClick={() => handlePersonSearch(c)} className="text-zinc-200 font-bold line-clamp-1 hover:underline text-left cursor-pointer">{c.name}</button>
-                        ))}
-                      </div>
-                    </div>
+              {status === 'watched' && face && (
+                <div className="flex items-center gap-4 bg-zinc-900/80 p-4 rounded-xl border border-zinc-800">
+                  <face.icon size={36} color={face.color} strokeWidth={1.2} />
+                  <div>
+                    <div className="text-xs font-bold uppercase tracking-wider" style={{ color: face.color }}>{face.label}</div>
+                    <div className="text-lg font-extrabold text-white">{currentScore.toFixed(1)}<span className="text-xs text-zinc-500"> /10.0</span></div>
                   </div>
-
-                  {movieExtraDetails.collection && (
-                    <div className="pt-2">
-                      <span className="text-zinc-500 block mb-2">シリーズ</span>
-                      <button 
-                        onClick={() => handleCollectionSearch(movieExtraDetails.collection)}
-                        className="text-zinc-200 font-bold hover:underline cursor-pointer text-sm line-clamp-2 text-left"
-                      >
-                        {movieExtraDetails.collection.name}
-                      </button>
-                    </div>
-                  )}
-
-                  {movieExtraDetails.genres && movieExtraDetails.genres.length > 0 && (
-                    <div className="pt-2">
-                      <span className="text-zinc-500 block mb-2">作品タグ</span>
-                      <div className="flex flex-wrap gap-2 pb-2">
-                        {movieExtraDetails.genres.map((g: any) => (
-                          <button key={g.id} onClick={() => {
-                            updateModalState(null); setActiveTab('home'); setSelectedTags([g.id.toString()]); setSearchTitle(''); setSearchPerson(null); setSearchCollection(null); setShowFilters(false); setApiPage(1); setNextApiPage(1); setForceSearch(false); setSortOrder('release_desc');
-                          }} className="px-3 py-1 rounded-full text-[11px] font-bold bg-zinc-900 text-zinc-300 border border-zinc-700 hover:text-white cursor-pointer transition-colors">{g.name}</button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {movieExtraDetails.streamingServices && movieExtraDetails.streamingServices.length > 0 && (
-                    <div className="pt-2">
-                      <span className="text-zinc-500 block mb-2">配信サービス</span>
-                      <div className="flex flex-wrap gap-3 pb-2">
-                        {movieExtraDetails.streamingServices.map((s: any, idx: number) => (
-                          <a key={idx} href={s.url} target="_blank" rel="noopener noreferrer" className="block active:scale-95 transition-transform cursor-pointer">
-                            <img src={s.logo} alt={s.name} className="w-10 h-10 rounded-xl shadow-md border border-zinc-800" />
-                          </a>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {relatedMovies.length > 0 && (
-                    <div className="pt-2">
-                      <span className="text-zinc-500 block mb-2">関連作品</span>
-                      <div className="flex overflow-x-auto gap-2.5 pb-2 [&::-webkit-scrollbar]:hidden">
-                        {relatedMovies.map((rm) => (
-                          <div key={rm.id} onClick={() => openDetailModal(rm, fromTab)} className="flex-none w-[90px] rounded-lg overflow-hidden cursor-pointer active:scale-95 transition border border-zinc-800">
-                            {rm.posterUrl ? <img src={rm.posterUrl} className="w-full aspect-[2/3] object-cover" /> : <div className="w-full aspect-[2/3] bg-zinc-800 flex items-center justify-center p-1 text-[9px] text-zinc-500 text-center">{rm.title}</div>}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
                 </div>
-              ) : null}
+              )}
+
+              <p className="text-xs text-zinc-300 leading-relaxed font-medium">{currentViewingMovie.apiSynopsis}</p>
+
+              {status === 'watched' && (collectionData?.aiContent || collectionData?.myReview) && (
+                <div className="space-y-4 pt-4 border-t border-zinc-800/80">
+                  {collectionData?.aiContent && <div className="bg-zinc-900/60 p-4 rounded-xl border border-zinc-800 space-y-2"><h4 className="text-xs font-bold text-zinc-400">内容メモ</h4><p className="text-xs text-zinc-300 whitespace-pre-wrap leading-relaxed">{collectionData.aiContent}</p></div>}
+                  {collectionData?.myReview && <div className="bg-zinc-900/60 p-4 rounded-xl border border-zinc-800 space-y-2"><h4 className="text-xs font-bold text-zinc-400">自分の感想</h4><p className="text-xs text-zinc-300 whitespace-pre-wrap leading-relaxed">{collectionData.myReview}</p></div>}
+                </div>
+              )}
+
+              <div className="space-y-4 pt-4 border-t border-zinc-800/80 text-xs">
+                {isExtraLoading ? (
+                  <div className="flex items-center justify-center py-4 text-zinc-500 gap-2"><Loader2 size={16} className="animate-spin text-red-500" /></div>
+                ) : movieExtraDetails ? (
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-2 bg-zinc-900/50 p-3 rounded-lg border border-zinc-800">
+                      <div>
+                        <span className="text-zinc-500 block mb-1">監督</span>
+                        {movieExtraDetails.directorObj ? (
+                          <button onClick={() => handlePersonSearch(movieExtraDetails.directorObj)} className="text-zinc-200 font-bold hover:underline cursor-pointer">{movieExtraDetails.directorObj.name}</button>
+                        ) : <span className="text-zinc-200 font-bold">不明</span>}
+                      </div>
+                      <div>
+                        <span className="text-zinc-500 block mb-1">キャスト</span>
+                        <div className="flex flex-col items-start gap-1">
+                          {movieExtraDetails.castObjs.map((c: any) => (
+                            <button key={c.id} onClick={() => handlePersonSearch(c)} className="text-zinc-200 font-bold line-clamp-1 hover:underline text-left cursor-pointer">{c.name}</button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    {movieExtraDetails.collection && (
+                      <div className="pt-2">
+                        <span className="text-zinc-500 block mb-2">シリーズ</span>
+                        <button 
+                          onClick={() => handleCollectionSearch(movieExtraDetails.collection)}
+                          className="text-zinc-200 font-bold hover:underline cursor-pointer text-sm line-clamp-2 text-left"
+                        >
+                          {movieExtraDetails.collection.name}
+                        </button>
+                      </div>
+                    )}
+
+                    {movieExtraDetails.genres && movieExtraDetails.genres.length > 0 && (
+                      <div className="pt-2">
+                        <span className="text-zinc-500 block mb-2">作品タグ</span>
+                        <div className="flex flex-wrap gap-2 pb-2">
+                          {movieExtraDetails.genres.map((g: any) => (
+                            <button key={g.id} onClick={() => {
+                              updateModalState(null); setActiveTab('home'); setSelectedTags([g.id.toString()]); setSearchTitle(''); setSearchPerson(null); setSearchCollection(null); setShowFilters(false); setApiPage(1); setNextApiPage(1); setForceSearch(false); setSortOrder('release_desc');
+                            }} className="px-3 py-1 rounded-full text-[11px] font-bold bg-zinc-900 text-zinc-300 border border-zinc-700 hover:text-white cursor-pointer transition-colors">{g.name}</button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {movieExtraDetails.streamingServices && movieExtraDetails.streamingServices.length > 0 && (
+                      <div className="pt-2">
+                        <span className="text-zinc-500 block mb-2">配信サービス</span>
+                        <div className="flex flex-wrap gap-3 pb-2">
+                          {movieExtraDetails.streamingServices.map((s: any, idx: number) => (
+                            <a key={idx} href={s.url} target="_blank" rel="noopener noreferrer" className="block active:scale-95 transition-transform cursor-pointer">
+                              <img src={s.logo} alt={s.name} className="w-10 h-10 rounded-xl shadow-md border border-zinc-800" />
+                            </a>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {relatedMovies.length > 0 && (
+                      <div className="pt-2">
+                        <span className="text-zinc-500 block mb-2">関連作品</span>
+                        <div className="flex overflow-x-auto gap-2.5 pb-2 [&::-webkit-scrollbar]:hidden">
+                          {relatedMovies.map((rm) => (
+                            <div key={rm.id} onClick={() => openDetailModal(rm, fromTab)} className="flex-none w-[90px] rounded-lg overflow-hidden cursor-pointer active:scale-95 transition border border-zinc-800">
+                              {rm.posterUrl ? <img src={rm.posterUrl} className="w-full aspect-[2/3] object-cover" /> : <div className="w-full aspect-[2/3] bg-zinc-800 flex items-center justify-center p-1 text-[9px] text-zinc-500 text-center">{rm.title}</div>}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : null}
+              </div>
             </div>
           </div>
-        </div>
 
-        <div className="absolute bottom-0 left-0 right-0 p-3 pb-safe bg-gradient-to-t from-[#141414] via-[#141414]/95 to-transparent pt-8 z-50 pointer-events-auto">
-          {status === 'none' && (
-            <div className="flex gap-3">
-              <button onClick={() => handleAddWatchlist(currentViewingMovie)} className="flex-1 py-3.5 bg-zinc-800 text-white font-bold rounded-lg flex justify-center items-center gap-2 hover:bg-zinc-700 active:scale-95 transition-all text-sm border border-zinc-700 cursor-pointer">
-                <Plus size={18} /> みたい！
+          <div className="absolute bottom-0 left-0 right-0 p-3 pb-safe bg-gradient-to-t from-[#141414] via-[#141414]/95 to-transparent pt-8 z-50 pointer-events-auto">
+            {status === 'none' && (
+              <div className="flex gap-3">
+                <button onClick={() => handleAddWatchlist(currentViewingMovie)} className="flex-1 py-3.5 bg-zinc-800 text-white font-bold rounded-lg flex justify-center items-center gap-2 hover:bg-zinc-700 active:scale-95 transition-all text-sm border border-zinc-700 cursor-pointer">
+                  <Plus size={18} /> みたい！
+                </button>
+                <button onClick={() => openReviewModal(currentViewingMovie)} className="flex-1 py-3.5 bg-red-600 text-white font-bold rounded-lg flex justify-center items-center gap-2 hover:bg-red-700 active:scale-95 transition-all text-sm shadow-[0_0_15px_rgba(220,38,38,0.4)] cursor-pointer">
+                  <Edit3 size={18} /> レビューする
+                </button>
+              </div>
+            )}
+            {status === 'watchlist' && (
+              <div className="flex gap-3">
+                <button onClick={handleQuickWatch} className="flex-1 py-3.5 bg-red-600 text-white font-bold rounded-lg flex justify-center items-center gap-2 hover:bg-red-700 transition text-sm shadow-[0_0_15px_rgba(220,38,38,0.4)] cursor-pointer">
+                  <CheckCircle2 size={18} /> みた！
+                </button>
+              </div>
+            )}
+            {status === 'watched' && (
+              <button onClick={() => openReviewModal(currentViewingMovie)} className="w-full py-3.5 bg-red-600 text-white font-bold rounded-lg flex justify-center items-center gap-2 hover:bg-red-700 active:scale-95 transition-all text-base shadow-[0_0_15px_rgba(220,38,38,0.4)] cursor-pointer">
+                <Edit3 size={18} /> {hasReviewData ? '修正する' : 'レビューする'}
               </button>
-              <button onClick={() => openReviewModal(currentViewingMovie)} className="flex-1 py-3.5 bg-red-600 text-white font-bold rounded-lg flex justify-center items-center gap-2 hover:bg-red-700 active:scale-95 transition-all text-sm shadow-[0_0_15px_rgba(220,38,38,0.4)] cursor-pointer">
-                <Edit3 size={18} /> レビューする
-              </button>
-            </div>
-          )}
-          {status === 'watchlist' && (
-            <div className="flex gap-3">
-              <button onClick={handleQuickWatch} className="flex-1 py-3.5 bg-red-600 text-white font-bold rounded-lg flex justify-center items-center gap-2 hover:bg-red-700 transition text-sm shadow-[0_0_15px_rgba(220,38,38,0.4)] cursor-pointer">
-                <CheckCircle2 size={18} /> みた！
-              </button>
-            </div>
-          )}
-          {status === 'watched' && (
-            <button onClick={() => openReviewModal(currentViewingMovie)} className="w-full py-3.5 bg-red-600 text-white font-bold rounded-lg flex justify-center items-center gap-2 hover:bg-red-700 active:scale-95 transition-all text-base shadow-[0_0_15px_rgba(220,38,38,0.4)] cursor-pointer">
-              <Edit3 size={18} /> {hasReviewData ? '修正する' : 'レビューする'}
-            </button>
-          )}
+            )}
+          </div>
         </div>
+        {/* ↑↑↑ ここまでスライドの対象 ↑↑↑ */}
       </div>
     );
   };
@@ -1212,7 +1218,7 @@ export default function App() {
       <div className="w-full h-full flex flex-col min-h-0">
         {renderAppHeader()}
         
-        {/* 固定ヘッダー（検索入力 ＆ クリア・ソートバー） */}
+        {/* ヘッダー部分は固定 */}
         <div className="shrink-0 z-30 bg-[#141414]/95 backdrop-blur-md pt-3 pb-3 px-4 border-b border-zinc-800/50">
           <div className="flex flex-col gap-2.5 relative">
             <div className="flex gap-2 relative">
@@ -1329,7 +1335,8 @@ export default function App() {
         {/* スクロールコンテンツエリア */}
         <div className="flex-1 overflow-hidden relative">
           {isSearchActive ? (
-            <div className={`w-full h-full overflow-y-auto pb-6 px-4 pt-4 ${swipeOutTarget === 'search' ? 'slide-out-right' : ''}`}
+            {/* ↓↓↓ 検索結果のみスライドの対象（bg-[#141414] 追加） ↓↓↓ */}
+            <div className={`w-full h-full overflow-y-auto pb-6 px-4 pt-4 bg-[#141414] ${swipeOutTarget === 'search' ? 'slide-out-right' : ''}`}
                  onTouchStart={handleTouchStart} onTouchEnd={(e) => handleTouchEnd(e, 'search')}>
               {visibleSearchResults.length > 0 ? (
                 <>
@@ -1357,7 +1364,7 @@ export default function App() {
               ) : (!isSearching && <p className="text-zinc-500 text-xs text-center mt-10">作品が見つかりません</p>)}
             </div>
           ) : (
-            <div className="w-full h-full overflow-y-auto space-y-6 pb-8">
+            <div className="w-full h-full overflow-y-auto space-y-6 pb-8 bg-[#141414]">
               {isHomeLoading ? (
                 <div className="flex flex-col items-center justify-center h-64 gap-3 text-zinc-500"><Loader2 size={32} className="animate-spin text-red-600" /><p className="text-xs font-bold">取得中...</p></div>
               ) : (
@@ -1434,9 +1441,11 @@ export default function App() {
     const visibleGenreList = displayList;
 
     return (
-      <div className={`w-full h-full flex flex-col min-h-0 ${swipeOutTarget === 'genre' ? 'slide-out-right' : 'animate-in fade-in duration-200'}`}
+      <div className="w-full h-full flex flex-col min-h-0 animate-in fade-in duration-200"
            onTouchStart={handleTouchStart} onTouchEnd={(e) => handleTouchEnd(e, 'genre')}>
         {renderAppHeader()}
+        
+        {/* ヘッダー部分はスライドさせず固定 */}
         <header className="shrink-0 bg-[#141414]/90 backdrop-blur-md px-4 py-3 flex items-center justify-between z-30 border-b border-zinc-800">
           <div className="flex items-center gap-3">
             <button onClick={() => { setActiveTab('home'); setSortOrder('release_desc'); setDisplayList([]); }} className="text-zinc-400 hover:text-white p-1 cursor-pointer"><ArrowLeft size={22} /></button>
@@ -1453,7 +1462,9 @@ export default function App() {
             </select>
           )}
         </header>
-        <div className="flex-1 overflow-y-auto p-4">
+
+        {/* ↓↓↓ ここからスライドの対象（bg-[#141414] で背景を不透明化） ↓↓↓ */}
+        <div className={`flex-1 overflow-y-auto p-4 bg-[#141414] ${swipeOutTarget === 'genre' ? 'slide-out-right' : ''}`}>
           {visibleGenreList.length > 0 ? (
             <>
               <div className="grid grid-cols-3 gap-2">
@@ -1484,6 +1495,7 @@ export default function App() {
             <div className="flex justify-center mt-10"><Loader2 size={24} className="animate-spin text-red-600" /></div>
           )}
         </div>
+        {/* ↑↑↑ ここまでスライドの対象 ↑↑↑ */}
       </div>
     );
   };
