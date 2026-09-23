@@ -1705,8 +1705,8 @@ export default function App() {
           to { opacity: 1; transform: scale(1); }
         }
         @keyframes slideOutRight {
-          from { transform: translateX(0); opacity: 1; }
-          to { transform: translateX(100%); opacity: 0; }
+          from { transform: translateX(0); }
+          to { transform: translateX(100%); }
         }
         .slide-out-right {
           animation: slideOutRight 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
