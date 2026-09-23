@@ -970,24 +970,25 @@ export default function App() {
     const hasReviewData = currentScore > 0 || !!collectionData?.aiContent || !!collectionData?.myReview;
 
     return (
-      <div className="absolute inset-0 bg-[#141414] z-[60] flex flex-col animate-in slide-in-from-bottom-10 fade-in duration-300"
+      <div className="absolute inset-0 z-[60] flex flex-col pointer-events-none"
            onTouchStart={handleTouchStart} onTouchEnd={(e) => handleTouchEnd(e, 'detail')}>
-        {renderAppHeader()}
         
-        {/* ヘッダー部分はスライドさせず固定 */}
-        <header className="flex items-center justify-between p-4 bg-gradient-to-b from-black/80 to-transparent absolute top-[49px] left-0 right-0 z-50 pointer-events-none">
-          <button onClick={() => updateModalState(null)} className="pointer-events-auto p-2.5 bg-black/60 backdrop-blur-md text-white rounded-full hover:bg-black/80 transition cursor-pointer">
-            <ArrowLeft size={20} />
-          </button>
-          {canDelete && (
-            <button onClick={() => updateModalState('delete_confirm')} className="pointer-events-auto p-2.5 bg-red-600/80 backdrop-blur-md text-white rounded-full hover:bg-red-700 transition cursor-pointer">
-              <Trash2 size={18} />
+        <div className="shrink-0 relative z-50 pointer-events-auto bg-[#141414]">
+          {renderAppHeader()}
+          <header className="flex items-center justify-between p-4 bg-gradient-to-b from-black/80 to-transparent absolute top-[49px] left-0 right-0 z-50 pointer-events-none">
+            <button onClick={() => updateModalState(null)} className="pointer-events-auto p-2.5 bg-black/60 backdrop-blur-md text-white rounded-full hover:bg-black/80 transition cursor-pointer">
+              <ArrowLeft size={20} />
             </button>
-          )}
-        </header>
+            {canDelete && (
+              <button onClick={() => updateModalState('delete_confirm')} className="pointer-events-auto p-2.5 bg-red-600/80 backdrop-blur-md text-white rounded-full hover:bg-red-700 transition cursor-pointer">
+                <Trash2 size={18} />
+              </button>
+            )}
+          </header>
+        </div>
 
         {currentModalMode === 'delete_confirm' && (
-          <div className="absolute inset-0 bg-black/80 backdrop-blur-md z-[80] flex items-center justify-center p-6">
+          <div className="absolute inset-0 bg-black/80 backdrop-blur-md z-[80] flex items-center justify-center p-6 pointer-events-auto">
             <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl max-w-xs w-full text-center space-y-4 shadow-2xl">
               <h3 className="text-lg font-bold text-white">リストから削除しますか？</h3>
               <div className="flex gap-3 pt-2">
@@ -998,8 +999,7 @@ export default function App() {
           </div>
         )}
 
-        {/* ↓↓↓ ここからスライドの対象（bg-[#141414] で背景を不透明化） ↓↓↓ */}
-        <div className={`flex-1 flex flex-col overflow-hidden relative bg-[#141414] ${swipeOutTarget === 'detail' ? 'slide-out-right' : ''}`}>
+        <div className={`flex-1 flex flex-col overflow-hidden relative pointer-events-auto bg-[#141414] ${swipeOutTarget === 'detail' ? 'slide-out-right' : 'animate-in slide-in-from-bottom-10 fade-in duration-300'}`}>
           <div className="flex-1 overflow-y-auto pb-28">
             <div className="relative w-full aspect-[2/3] max-h-[50vh] bg-zinc-900 flex justify-center overflow-hidden">
               <div className="absolute inset-0 bg-cover bg-center blur-xl opacity-40 scale-110" style={{ backgroundImage: `url(${currentViewingMovie.posterUrl})` }} />
@@ -1061,12 +1061,7 @@ export default function App() {
                     {movieExtraDetails.collection && (
                       <div className="pt-2">
                         <span className="text-zinc-500 block mb-2">シリーズ</span>
-                        <button 
-                          onClick={() => handleCollectionSearch(movieExtraDetails.collection)}
-                          className="text-zinc-200 font-bold hover:underline cursor-pointer text-sm line-clamp-2 text-left"
-                        >
-                          {movieExtraDetails.collection.name}
-                        </button>
+                        <button onClick={() => handleCollectionSearch(movieExtraDetails.collection)} className="text-zinc-200 font-bold hover:underline cursor-pointer text-sm line-clamp-2 text-left">{movieExtraDetails.collection.name}</button>
                       </div>
                     )}
 
@@ -1100,7 +1095,7 @@ export default function App() {
                       <div className="pt-2">
                         <span className="text-zinc-500 block mb-2">関連作品</span>
                         <div className="flex overflow-x-auto gap-2.5 pb-2 [&::-webkit-scrollbar]:hidden">
-                          {relatedMovies.map((rm) => (
+                          {relatedMovies.map((rm: any) => (
                             <div key={rm.id} onClick={() => openDetailModal(rm, fromTab)} className="flex-none w-[90px] rounded-lg overflow-hidden cursor-pointer active:scale-95 transition border border-zinc-800">
                               {rm.posterUrl ? <img src={rm.posterUrl} className="w-full aspect-[2/3] object-cover" /> : <div className="w-full aspect-[2/3] bg-zinc-800 flex items-center justify-center p-1 text-[9px] text-zinc-500 text-center">{rm.title}</div>}
                             </div>
@@ -1112,34 +1107,25 @@ export default function App() {
                 ) : null}
               </div>
             </div>
-          </div>
 
-          <div className="absolute bottom-0 left-0 right-0 p-3 pb-safe bg-gradient-to-t from-[#141414] via-[#141414]/95 to-transparent pt-8 z-50 pointer-events-auto">
-            {status === 'none' && (
-              <div className="flex gap-3">
-                <button onClick={() => handleAddWatchlist(currentViewingMovie)} className="flex-1 py-3.5 bg-zinc-800 text-white font-bold rounded-lg flex justify-center items-center gap-2 hover:bg-zinc-700 active:scale-95 transition-all text-sm border border-zinc-700 cursor-pointer">
-                  <Plus size={18} /> みたい！
-                </button>
-                <button onClick={() => openReviewModal(currentViewingMovie)} className="flex-1 py-3.5 bg-red-600 text-white font-bold rounded-lg flex justify-center items-center gap-2 hover:bg-red-700 active:scale-95 transition-all text-sm shadow-[0_0_15px_rgba(220,38,38,0.4)] cursor-pointer">
-                  <Edit3 size={18} /> レビューする
-                </button>
-              </div>
-            )}
-            {status === 'watchlist' && (
-              <div className="flex gap-3">
-                <button onClick={handleQuickWatch} className="flex-1 py-3.5 bg-red-600 text-white font-bold rounded-lg flex justify-center items-center gap-2 hover:bg-red-700 transition text-sm shadow-[0_0_15px_rgba(220,38,38,0.4)] cursor-pointer">
-                  <CheckCircle2 size={18} /> みた！
-                </button>
-              </div>
-            )}
-            {status === 'watched' && (
-              <button onClick={() => openReviewModal(currentViewingMovie)} className="w-full py-3.5 bg-red-600 text-white font-bold rounded-lg flex justify-center items-center gap-2 hover:bg-red-700 active:scale-95 transition-all text-base shadow-[0_0_15px_rgba(220,38,38,0.4)] cursor-pointer">
-                <Edit3 size={18} /> {hasReviewData ? '修正する' : 'レビューする'}
-              </button>
-            )}
+            <div className="absolute bottom-0 left-0 right-0 p-3 pb-safe bg-gradient-to-t from-[#141414] via-[#141414]/95 to-transparent pt-8 z-50 pointer-events-auto">
+              {status === 'none' && (
+                <div className="flex gap-3">
+                  <button onClick={() => handleAddWatchlist(currentViewingMovie)} className="flex-1 py-3.5 bg-zinc-800 text-white font-bold rounded-lg flex justify-center items-center gap-2 hover:bg-zinc-700 active:scale-95 transition-all text-sm border border-zinc-700 cursor-pointer"><Plus size={18} /> みたい！</button>
+                  <button onClick={() => openReviewModal(currentViewingMovie)} className="flex-1 py-3.5 bg-red-600 text-white font-bold rounded-lg flex justify-center items-center gap-2 hover:bg-red-700 active:scale-95 transition-all text-sm shadow-[0_0_15px_rgba(220,38,38,0.4)] cursor-pointer"><Edit3 size={18} /> レビューする</button>
+                </div>
+              )}
+              {status === 'watchlist' && (
+                <div className="flex gap-3">
+                  <button onClick={handleQuickWatch} className="flex-1 py-3.5 bg-red-600 text-white font-bold rounded-lg flex justify-center items-center gap-2 hover:bg-red-700 transition text-sm shadow-[0_0_15px_rgba(220,38,38,0.4)] cursor-pointer"><CheckCircle2 size={18} /> みた！</button>
+                </div>
+              )}
+              {status === 'watched' && (
+                <button onClick={() => openReviewModal(currentViewingMovie)} className="w-full py-3.5 bg-red-600 text-white font-bold rounded-lg flex justify-center items-center gap-2 hover:bg-red-700 active:scale-95 transition-all text-base shadow-[0_0_15px_rgba(220,38,38,0.4)] cursor-pointer"><Edit3 size={18} /> {hasReviewData ? '修正する' : 'レビューする'}</button>
+              )}
+            </div>
           </div>
         </div>
-        {/* ↑↑↑ ここまでスライドの対象 ↑↑↑ */}
       </div>
     );
   };
@@ -1218,7 +1204,6 @@ export default function App() {
       <div className="w-full h-full flex flex-col min-h-0">
         {renderAppHeader()}
         
-        {/* ヘッダー部分は固定 */}
         <div className="shrink-0 z-30 bg-[#141414]/95 backdrop-blur-md pt-3 pb-3 px-4 border-b border-zinc-800/50">
           <div className="flex flex-col gap-2.5 relative">
             <div className="flex gap-2 relative">
@@ -1332,10 +1317,77 @@ export default function App() {
           </div>
         </div>
 
-        {/* スクロールコンテンツエリア */}
-        <div className="flex-1 overflow-hidden relative">
-          {isSearchActive ? (
-            <div className={`w-full h-full overflow-y-auto pb-6 px-4 pt-4 bg-[#141414] ${swipeOutTarget === 'search' ? 'slide-out-right' : ''}`}
+        <div className="flex-1 overflow-hidden relative flex flex-col">
+          
+          <div className="w-full h-full overflow-y-auto space-y-6 pb-8 bg-[#141414] absolute inset-0 z-0">
+            {isHomeLoading ? (
+              <div className="flex flex-col items-center justify-center h-64 gap-3 text-zinc-500"><Loader2 size={32} className="animate-spin text-red-600" /><p className="text-xs font-bold">取得中...</p></div>
+            ) : (
+              <>
+                {recommendedList.length > 0 && (
+                  <div className="px-4 pt-3">
+                    <h3 className="text-zinc-100 font-bold text-sm mb-2">おすすめ作品</h3>
+                    <div className="relative w-full aspect-[16/9] rounded-xl overflow-hidden shadow-2xl cursor-pointer bg-zinc-900 flex"
+                      onClick={() => openDetailModal(recommendedList[heroIndex], 'home')}
+                      onTouchStart={e => heroTouchStartX.current = e.touches[0].clientX}
+                      onTouchEnd={e => {
+                        const diff = e.changedTouches[0].clientX - heroTouchStartX.current;
+                        const topLength = Math.min(recommendedList.length, 10);
+                        if (diff > 50) setHeroIndex(prev => (prev - 1 + topLength) % topLength);
+                        if (diff < -50) setHeroIndex(prev => (prev + 1) % topLength);
+                      }}
+                    >
+                      <div className="flex w-full h-full transition-transform duration-500 ease-out" style={{ transform: `translateX(-${heroIndex * 100}%)` }}>
+                        {recommendedList.slice(0, 10).map((movie) => (
+                          <div key={movie.id} className="w-full h-full flex-shrink-0 relative">
+                            <img src={movie.backdropUrl || movie.posterUrl} className="w-full h-full object-cover" />
+                            <div className="absolute inset-0 bg-gradient-to-t from-[#0a0a0a] via-[#0a0a0a]/20 to-transparent p-4 flex flex-col justify-end">
+                              <h4 className="text-white font-extrabold text-base line-clamp-1 drop-shadow-md">{movie.title}</h4>
+                              <p className="text-zinc-300 text-[11px] line-clamp-1 mt-0.5">{movie.apiSynopsis}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="absolute top-2 right-3 flex gap-1.5 z-10 flex-wrap justify-end max-w-[50%]">
+                        {recommendedList.slice(0, 10).map((_, idx) => (
+                          <span key={idx} className={`h-0.5 rounded-full transition-all ${idx === heroIndex ? 'bg-white/80 w-3' : 'bg-white/30 w-1.5'}`} />
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+                {CATEGORIES.map(category => {
+                  if (category === 'おすすめ') return null;
+                  const allMovies = homeCategoriesData[category] || [];
+                  if (allMovies.length === 0) return null;
+                  const isNowPlaying = category === '公開中';
+                  return (
+                    <div key={category} className="space-y-2.5">
+                      <div className="flex justify-between items-end px-4">
+                        <h3 className={`font-bold ${isNowPlaying ? 'text-red-500 text-base tracking-wide' : 'text-zinc-100 text-sm'}`}>{category}</h3>
+                        <button onClick={() => handleOpenGenreList(category)} className="text-[11px] font-bold text-zinc-400 hover:text-white flex items-center gap-0.5 cursor-pointer">すべて見る <ChevronRight size={12} /></button>
+                      </div>
+                      <div className="flex overflow-x-auto snap-x px-4 gap-2.5 pb-2 pt-1 [&::-webkit-scrollbar]:hidden">
+                        {allMovies.slice(0, 10).map((movie: any) => {
+                          const status = getCollectionData(movie.id)?.status;
+                          return (
+                            <div key={movie.id} onClick={() => openDetailModal(movie, 'home')} className={`flex-none snap-start relative rounded-md overflow-hidden active:scale-95 transition-transform cursor-pointer group shadow-lg ${isNowPlaying ? 'w-[125px]' : 'w-[100px]'}`}>
+                              {movie.posterUrl ? <img src={movie.posterUrl} className="w-full aspect-[2/3] object-cover bg-zinc-800 group-hover:brightness-75 transition" /> : <div className="w-full aspect-[2/3] bg-zinc-800 flex items-center justify-center p-1 text-center text-[10px] text-zinc-500">{movie.title}</div>}
+                              {status && <div className="absolute top-1 right-1 bg-black/70 rounded-full p-1 backdrop-blur-md border border-white/10 z-10">{status === 'watched' ? <CheckCircle2 size={12} className="text-green-500" /> : <Bookmark size={12} className="text-white" />}</div>}
+                              {isNowPlaying && <div className="absolute top-1 left-1 bg-red-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded shadow-sm">上映中</div>}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </>
+            )}
+          </div>
+
+          {isSearchActive && (
+            <div className={`w-full h-full overflow-y-auto pb-6 px-4 pt-4 bg-[#141414] absolute inset-0 z-10 ${swipeOutTarget === 'search' ? 'slide-out-right' : 'animate-in fade-in'}`}
                  onTouchStart={handleTouchStart} onTouchEnd={(e) => handleTouchEnd(e, 'search')}>
               {visibleSearchResults.length > 0 ? (
                 <>
@@ -1349,85 +1401,13 @@ export default function App() {
                   </div>
                   {nextApiPage <= totalApiPages && (
                     <div className="py-6 flex justify-center">
-                      <button 
-                        onClick={() => { if(!isSearching){ setApiPage(nextApiPage); } }} 
-                        disabled={isSearching}
-                        className="px-6 py-2 bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-bold rounded-full transition disabled:opacity-50 flex items-center gap-2 cursor-pointer shadow-lg"
-                      >
-                        {isSearching ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
-                        さらに読み込む
+                      <button onClick={() => { if(!isSearching){ setApiPage(nextApiPage); } }} disabled={isSearching} className="px-6 py-2 bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-bold rounded-full transition disabled:opacity-50 flex items-center gap-2 cursor-pointer shadow-lg">
+                        {isSearching ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />} さらに読み込む
                       </button>
                     </div>
                   )}
                 </>
               ) : (!isSearching && <p className="text-zinc-500 text-xs text-center mt-10">作品が見つかりません</p>)}
-            </div>
-          ) : (
-            <div className="w-full h-full overflow-y-auto space-y-6 pb-8 bg-[#141414]">
-              {isHomeLoading ? (
-                <div className="flex flex-col items-center justify-center h-64 gap-3 text-zinc-500"><Loader2 size={32} className="animate-spin text-red-600" /><p className="text-xs font-bold">取得中...</p></div>
-              ) : (
-                <>
-                  {recommendedList.length > 0 && (
-                    <div className="px-4 pt-3">
-                      <h3 className="text-zinc-100 font-bold text-sm mb-2">おすすめ作品</h3>
-                      <div className="relative w-full aspect-[16/9] rounded-xl overflow-hidden shadow-2xl cursor-pointer bg-zinc-900 flex"
-                        onClick={() => openDetailModal(recommendedList[heroIndex], 'home')}
-                        onTouchStart={e => heroTouchStartX.current = e.touches[0].clientX}
-                        onTouchEnd={e => {
-                          const diff = e.changedTouches[0].clientX - heroTouchStartX.current;
-                          const topLength = Math.min(recommendedList.length, 10);
-                          if (diff > 50) setHeroIndex(prev => (prev - 1 + topLength) % topLength);
-                          if (diff < -50) setHeroIndex(prev => (prev + 1) % topLength);
-                        }}
-                      >
-                        <div className="flex w-full h-full transition-transform duration-500 ease-out" style={{ transform: `translateX(-${heroIndex * 100}%)` }}>
-                          {recommendedList.slice(0, 10).map((movie) => (
-                            <div key={movie.id} className="w-full h-full flex-shrink-0 relative">
-                              <img src={movie.backdropUrl || movie.posterUrl} className="w-full h-full object-cover" />
-                              <div className="absolute inset-0 bg-gradient-to-t from-[#0a0a0a] via-[#0a0a0a]/20 to-transparent p-4 flex flex-col justify-end">
-                                <h4 className="text-white font-extrabold text-base line-clamp-1 drop-shadow-md">{movie.title}</h4>
-                                <p className="text-zinc-300 text-[11px] line-clamp-1 mt-0.5">{movie.apiSynopsis}</p>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                        <div className="absolute top-2 right-3 flex gap-1.5 z-10 flex-wrap justify-end max-w-[50%]">
-                          {recommendedList.slice(0, 10).map((_, idx) => (
-                            <span key={idx} className={`h-0.5 rounded-full transition-all ${idx === heroIndex ? 'bg-white/80 w-3' : 'bg-white/30 w-1.5'}`} />
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                  {CATEGORIES.map(category => {
-                    if (category === 'おすすめ') return null;
-                    const allMovies = homeCategoriesData[category] || [];
-                    if (allMovies.length === 0) return null;
-                    const isNowPlaying = category === '公開中';
-                    return (
-                      <div key={category} className="space-y-2.5">
-                        <div className="flex justify-between items-end px-4">
-                          <h3 className={`font-bold ${isNowPlaying ? 'text-red-500 text-base tracking-wide' : 'text-zinc-100 text-sm'}`}>{category}</h3>
-                          <button onClick={() => handleOpenGenreList(category)} className="text-[11px] font-bold text-zinc-400 hover:text-white flex items-center gap-0.5 cursor-pointer">すべて見る <ChevronRight size={12} /></button>
-                        </div>
-                        <div className="flex overflow-x-auto snap-x px-4 gap-2.5 pb-2 pt-1 [&::-webkit-scrollbar]:hidden">
-                          {allMovies.slice(0, 10).map((movie: any) => {
-                            const status = getCollectionData(movie.id)?.status;
-                            return (
-                              <div key={movie.id} onClick={() => openDetailModal(movie, 'home')} className={`flex-none snap-start relative rounded-md overflow-hidden active:scale-95 transition-transform cursor-pointer group shadow-lg ${isNowPlaying ? 'w-[125px]' : 'w-[100px]'}`}>
-                                {movie.posterUrl ? <img src={movie.posterUrl} className="w-full aspect-[2/3] object-cover bg-zinc-800 group-hover:brightness-75 transition" /> : <div className="w-full aspect-[2/3] bg-zinc-800 flex items-center justify-center p-1 text-center text-[10px] text-zinc-500">{movie.title}</div>}
-                                {status && <div className="absolute top-1 right-1 bg-black/70 rounded-full p-1 backdrop-blur-md border border-white/10 z-10">{status === 'watched' ? <CheckCircle2 size={12} className="text-green-500" /> : <Bookmark size={12} className="text-white" />}</div>}
-                                {isNowPlaying && <div className="absolute top-1 left-1 bg-red-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded shadow-sm">上映中</div>}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </>
-              )}
             </div>
           )}
         </div>
@@ -1440,30 +1420,30 @@ export default function App() {
     const visibleGenreList = displayList;
 
     return (
-      <div className="w-full h-full flex flex-col min-h-0 animate-in fade-in duration-200"
+      <div className="w-full h-full flex flex-col min-h-0 pointer-events-none"
            onTouchStart={handleTouchStart} onTouchEnd={(e) => handleTouchEnd(e, 'genre')}>
-        {renderAppHeader()}
         
-        {/* ヘッダー部分はスライドさせず固定 */}
-        <header className="shrink-0 bg-[#141414]/90 backdrop-blur-md px-4 py-3 flex items-center justify-between z-30 border-b border-zinc-800">
-          <div className="flex items-center gap-3">
-            <button onClick={() => { setActiveTab('home'); setSortOrder('release_desc'); setDisplayList([]); }} className="text-zinc-400 hover:text-white p-1 cursor-pointer"><ArrowLeft size={22} /></button>
-            <h2 className="text-base font-bold text-white">{genreViewCategory}</h2>
-          </div>
-          {genreViewCategory === '公開中' && (
-            <select value={sortOrder} onChange={e => setSortOrder(e.target.value)} className="bg-zinc-900 border border-zinc-800 text-zinc-200 text-[11px] font-medium rounded-lg px-2 py-1 focus:outline-none cursor-pointer">
-              <option value="release_desc">公開日が新しい順</option>
-              <option value="release_asc">公開日が古い順</option>
-              <option value="runtime_desc">上映時間が長い順</option>
-              <option value="runtime_asc">上映時間が短い順</option>
-              <option value="rating_desc">評価が高い順</option>
-              <option value="rating_asc">評価が低い順</option>
-            </select>
-          )}
-        </header>
+        <div className="shrink-0 pointer-events-auto bg-[#141414]">
+          {renderAppHeader()}
+          <header className="bg-[#141414]/90 backdrop-blur-md px-4 py-3 flex items-center justify-between z-30 border-b border-zinc-800">
+            <div className="flex items-center gap-3">
+              <button onClick={() => { setActiveTab('home'); setSortOrder('release_desc'); setDisplayList([]); }} className="text-zinc-400 hover:text-white p-1 cursor-pointer"><ArrowLeft size={22} /></button>
+              <h2 className="text-base font-bold text-white">{genreViewCategory}</h2>
+            </div>
+            {genreViewCategory === '公開中' && (
+              <select value={sortOrder} onChange={e => setSortOrder(e.target.value)} className="bg-zinc-900 border border-zinc-800 text-zinc-200 text-[11px] font-medium rounded-lg px-2 py-1 focus:outline-none cursor-pointer">
+                <option value="release_desc">公開日が新しい順</option>
+                <option value="release_asc">公開日が古い順</option>
+                <option value="runtime_desc">上映時間が長い順</option>
+                <option value="runtime_asc">上映時間が短い順</option>
+                <option value="rating_desc">評価が高い順</option>
+                <option value="rating_asc">評価が低い順</option>
+              </select>
+            )}
+          </header>
+        </div>
 
-        {/* ↓↓↓ ここからスライドの対象（bg-[#141414] で背景を不透明化） ↓↓↓ */}
-        <div className={`flex-1 overflow-y-auto p-4 bg-[#141414] ${swipeOutTarget === 'genre' ? 'slide-out-right' : ''}`}>
+        <div className={`flex-1 overflow-y-auto p-4 pointer-events-auto bg-[#141414] ${swipeOutTarget === 'genre' ? 'slide-out-right' : 'animate-in fade-in duration-200'}`}>
           {visibleGenreList.length > 0 ? (
             <>
               <div className="grid grid-cols-3 gap-2">
@@ -1479,13 +1459,8 @@ export default function App() {
               </div>
               {nextApiPage <= totalApiPages && (
                 <div className="py-6 flex justify-center">
-                  <button 
-                    onClick={() => { if(!isSearching){ setApiPage(nextApiPage); } }} 
-                    disabled={isSearching}
-                    className="px-6 py-2 bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-bold rounded-full transition disabled:opacity-50 flex items-center gap-2 cursor-pointer shadow-lg"
-                  >
-                    {isSearching ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
-                    さらに読み込む
+                  <button onClick={() => { if(!isSearching){ setApiPage(nextApiPage); } }} disabled={isSearching} className="px-6 py-2 bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-bold rounded-full transition disabled:opacity-50 flex items-center gap-2 cursor-pointer shadow-lg">
+                    {isSearching ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />} さらに読み込む
                   </button>
                 </div>
               )}
@@ -1494,7 +1469,6 @@ export default function App() {
             <div className="flex justify-center mt-10"><Loader2 size={24} className="animate-spin text-red-600" /></div>
           )}
         </div>
-        {/* ↑↑↑ ここまでスライドの対象 ↑↑↑ */}
       </div>
     );
   };
@@ -1589,7 +1563,6 @@ export default function App() {
 
       <div className="w-full max-w-md h-full bg-[#141414] shadow-2xl relative flex flex-col overflow-hidden">
 
-        {/* ハンバーガーメニュー */}
         <div 
           ref={menuRef}
           className={`absolute top-0 right-0 bottom-0 w-64 bg-[#161616] border-l border-zinc-800/80 shadow-2xl z-[130] flex flex-col transition-transform duration-300 ease-in-out pointer-events-auto ${isMenuOpen ? 'translate-x-0' : 'translate-x-full'}`}
@@ -1626,7 +1599,6 @@ export default function App() {
           )}
         </div>
 
-        {/* 吸い込みアニメーションオーバーレイ */}
         {flyingPoster && (
           <div 
             className="fixed z-[105] pointer-events-none rounded-md overflow-hidden shadow-2xl"
@@ -1639,7 +1611,6 @@ export default function App() {
           />
         )}
 
-        {/* グローバル確認モーダル */}
         {showReviewConfirm && confirmMovie && (
           <div className="absolute inset-0 bg-black/80 backdrop-blur-md z-[110] flex items-center justify-center p-6 animate-in zoom-in">
             <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl max-w-xs w-full text-center space-y-4 shadow-2xl">
@@ -1654,19 +1625,16 @@ export default function App() {
           </div>
         )}
 
-        {/* メインコンテンツエリア */}
         <div className="flex-1 relative overflow-hidden flex flex-col min-h-0">
-          <div style={{ display: activeTab === 'home' ? 'flex' : 'none' }} className="w-full h-full flex-col absolute inset-0">{renderHome()}</div>
-          <div style={{ display: activeTab === 'genre_view' ? 'flex' : 'none' }} className="w-full h-full flex-col absolute inset-0">{renderGenreView()}</div>
-          <div style={{ display: activeTab === 'watchlist' ? 'flex' : 'none' }} className="w-full h-full flex-col absolute inset-0">{renderMyList('watchlist')}</div>
-          <div style={{ display: activeTab === 'watched' ? 'flex' : 'none' }} className="w-full h-full flex-col absolute inset-0">{renderMyList('watched')}</div>
+          <div style={{ display: (activeTab === 'home' || activeTab === 'genre_view') ? 'flex' : 'none' }} className="w-full h-full flex-col absolute inset-0 z-0">{renderHome()}</div>
+          <div style={{ display: activeTab === 'genre_view' ? 'flex' : 'none' }} className="w-full h-full flex-col absolute inset-0 z-10">{renderGenreView()}</div>
+          <div style={{ display: activeTab === 'watchlist' ? 'flex' : 'none' }} className="w-full h-full flex-col absolute inset-0 z-0">{renderMyList('watchlist')}</div>
+          <div style={{ display: activeTab === 'watched' ? 'flex' : 'none' }} className="w-full h-full flex-col absolute inset-0 z-0">{renderMyList('watched')}</div>
           
-          {/* 詳細・レビューモーダル */}
           {(currentModalMode === 'detail' || currentModalMode === 'delete_confirm') && renderDetailModal()}
           {currentModalMode === 'review' && renderReviewModal()}
         </div>
 
-        {/* フッターナビゲーション */}
         <nav className="shrink-0 bg-[#141414]/98 backdrop-blur-xl border-t border-zinc-800 flex justify-around items-center py-2.5 px-3 pb-safe z-[100] relative">
           <button id="tab-btn-home" onClick={() => handleTabClick('home')} className={`flex flex-col items-center py-1 px-3 transition cursor-pointer ${activeTab === 'home' || activeTab === 'genre_view' ? 'text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>
             <Home size={24} />
@@ -1683,7 +1651,6 @@ export default function App() {
         </nav>
       </div>
 
-      {/* CSS: Safariバグ対応とスライダーカスタマイズ */}
       <style dangerouslySetInnerHTML={{__html: `
         html, body {
           margin: 0; padding: 0;
@@ -1723,7 +1690,6 @@ export default function App() {
           animation: slideOutRight 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
         }
         
-        /* スライダーのタッチ判定を拡大 (40px) */
         input[type=range].custom-range-slider {
           pointer-events: none;
         }
@@ -1787,12 +1753,10 @@ export default function App() {
             font-size: 14px;
             letter-spacing: 0.05em;
           }
-          /* カバー以外の要素を完全に隠す */
           .app-wrapper > div:not(.landscape-overlay) {
             display: none !important;
           }
         }
-
       `}} />
     </div>
   );
