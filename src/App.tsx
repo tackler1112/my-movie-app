@@ -1335,7 +1335,6 @@ export default function App() {
         {/* スクロールコンテンツエリア */}
         <div className="flex-1 overflow-hidden relative">
           {isSearchActive ? (
-            {/* ↓↓↓ 検索結果のみスライドの対象（bg-[#141414] 追加） ↓↓↓ */}
             <div className={`w-full h-full overflow-y-auto pb-6 px-4 pt-4 bg-[#141414] ${swipeOutTarget === 'search' ? 'slide-out-right' : ''}`}
                  onTouchStart={handleTouchStart} onTouchEnd={(e) => handleTouchEnd(e, 'search')}>
               {visibleSearchResults.length > 0 ? (
