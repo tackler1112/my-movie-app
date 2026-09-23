@@ -78,6 +78,18 @@ const DualRangeSlider = ({ min, max, step = 1, minVal, maxVal, onChange, unit = 
   const minPercent = Math.min(100, Math.max(0, ((minVal - min) / (max - min)) * 100));
   const maxPercent = Math.min(100, Math.max(0, ((maxVal - min) / (max - min)) * 100));
 
+  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const percent = x / rect.width;
+    const val = min + percent * (max - min);
+    if (Math.abs(val - minVal) < Math.abs(val - maxVal)) {
+      setMinThumbZ(40);
+    } else {
+      setMinThumbZ(30);
+    }
+  };
+
   return (
     <div className="w-full space-y-2">
       <div className="flex items-center justify-between gap-2">
@@ -91,21 +103,19 @@ const DualRangeSlider = ({ min, max, step = 1, minVal, maxVal, onChange, unit = 
           {unit && <span className="text-[10px] text-zinc-400 font-medium shrink-0">{unit}</span>}
         </div>
       </div>
-      <div className="relative w-full h-8 flex items-center select-none">
+      <div className="relative w-full h-8 flex items-center select-none" onPointerDown={handlePointerDown}>
         <div className="absolute w-full h-2 bg-zinc-800 rounded-lg" />
         <div className="absolute h-2 bg-red-600 rounded-lg" style={{ left: `${minPercent}%`, width: `${maxPercent - minPercent}%` }} />
         
         <input 
           type="range" min={min} max={max} step={step} value={minVal} 
           onChange={e => onChange(Math.min(Number(e.target.value), maxVal - step), maxVal)} 
-          onTouchStart={() => setMinThumbZ(40)} onMouseDown={() => setMinThumbZ(40)}
           className="absolute w-full h-2 opacity-0 custom-range-slider" 
           style={{ zIndex: minThumbZ }} 
         />
         <input 
           type="range" min={min} max={max} step={step} value={maxVal} 
           onChange={e => onChange(minVal, Math.max(Number(e.target.value), minVal + step))} 
-          onTouchStart={() => setMinThumbZ(30)} onMouseDown={() => setMinThumbZ(30)}
           className="absolute w-full h-2 opacity-0 custom-range-slider" 
           style={{ zIndex: minThumbZ === 40 ? 30 : 40 }} 
         />
@@ -131,7 +141,7 @@ const defaultFilters: FilterState = {
 };
 
 const runtimeCache = new Map<string, number>();
-const castCheckCache = new Map<string, boolean>(); // キャスト有無キャッシュ
+const castCheckCache = new Map<string, boolean>();
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('home');
@@ -162,6 +172,7 @@ export default function App() {
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [searchTitle, setSearchTitle] = useState('');
   const [searchPerson, setSearchPerson] = useState<{ id: number, name: string, type: 'cast' | 'director' } | null>(null);
+  const [searchCollection, setSearchCollection] = useState<{ id: number, name: string } | null>(null);
   
   const [showFilters, setShowFilters] = useState(false);
   const filterMenuRef = useRef<HTMLDivElement>(null);
@@ -203,13 +214,28 @@ export default function App() {
   const detailPosterRef = useRef<HTMLImageElement>(null);
   const [flyingPoster, setFlyingPoster] = useState<{ url: string; start: DOMRect; target: DOMRect } | null>(null);
 
-  // --- 設定メニューと外側クリック制御用のステート ---
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [menuView, setMenuView] = useState<'main' | 'settings'>('main');
   const menuRef = useRef<HTMLDivElement>(null);
   
   const [showAdult, setShowAdult] = useState(() => JSON.parse(localStorage.getItem('showAdult') || 'false'));
   const [showIncomplete, setShowIncomplete] = useState(() => JSON.parse(localStorage.getItem('showIncomplete') || 'false'));
+
+  const touchStartX = useRef(0);
+  const touchStartY = useRef(0);
+  const [swipeOutTarget, setSwipeOutTarget] = useState<'detail' | 'genre' | 'search' | null>(null);
+
+  // --- ヘッダー上部色の設定 ---
+  useEffect(() => {
+    let metaThemeColor = document.querySelector('meta[name="theme-color"]');
+    if (!metaThemeColor) {
+      metaThemeColor = document.createElement('meta');
+      metaThemeColor.setAttribute('name', 'theme-color');
+      document.head.appendChild(metaThemeColor);
+    }
+    metaThemeColor.setAttribute('content', '#141414');
+    document.body.style.backgroundColor = '#141414';
+  }, []);
 
   useEffect(() => {
     localStorage.setItem('showAdult', JSON.stringify(showAdult));
@@ -240,7 +266,34 @@ export default function App() {
     }
   }, [isMenuOpen]);
 
-  const isSearchActive = forceSearch || searchTitle !== '' || selectedTags.length > 0 || isFilterApplied || searchPerson !== null;
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0].clientX;
+    touchStartY.current = e.touches[0].clientY;
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent, type: 'detail' | 'genre' | 'search') => {
+    if (type === 'search' && !isSearchActive) return;
+
+    const touchEndX = e.changedTouches[0].clientX;
+    const touchEndY = e.changedTouches[0].clientY;
+    const diffX = touchEndX - touchStartX.current;
+    const diffY = touchEndY - touchStartY.current;
+
+    // 画面左端からのフリックのみ有効にする
+    if (touchStartX.current > 50) return;
+
+    if (diffX > 80 && Math.abs(diffY) < 50) {
+      setSwipeOutTarget(type);
+      setTimeout(() => {
+        if (type === 'detail') updateModalState(null);
+        if (type === 'genre') { setActiveTab('home'); setDisplayList([]); }
+        if (type === 'search') resetSearch();
+        setSwipeOutTarget(null);
+      }, 250);
+    }
+  };
+
+  const isSearchActive = forceSearch || searchTitle !== '' || selectedTags.length > 0 || isFilterApplied || searchPerson !== null || searchCollection !== null;
 
   useEffect(() => {
     const fetchApiGenres = async () => {
@@ -314,7 +367,6 @@ export default function App() {
               return true;
             });
 
-            // 公開中タブのトップカルーセル用プレフィルタ（キャストチェックも考慮）
             if (cat === '公開中') {
               const checkedResults = await Promise.all(results.map(async (m: any) => {
                 let hasCast = true;
@@ -332,7 +384,7 @@ export default function App() {
                     }
                   }
                 }
-                const isValid = movie.poster_path && movie.genre_ids && movie.genre_ids.length > 0 && !(movie.vote_count < 3 && !hasCast);
+                const isValid = m.poster_path && m.genre_ids && m.genre_ids.length > 0 && !(m.vote_count < 3 && !hasCast);
                 return isValid ? m : null;
               }));
               results = checkedResults.filter(Boolean);
@@ -387,13 +439,15 @@ export default function App() {
         const runtimeMinutes = detail.runtime || 0;
         const runtime = runtimeMinutes ? `${runtimeMinutes}分` : '';
         runtimeCache.set(currentViewingMovie.id, runtimeMinutes);
+        
+        const collection = detail.belongs_to_collection ? { id: detail.belongs_to_collection.id, name: detail.belongs_to_collection.name } : null;
 
         const streamingServices = (watch.results?.JP?.flatrate || []).map((p: any) => ({
           name: p.provider_name, logo: `https://image.tmdb.org/t/p/w90${p.logo_path}`, url: watch.results?.JP?.link || 'https://www.themoviedb.org/'
         }));
 
         setMovieExtraDetails({ 
-          runtime, runtimeMinutes, directorObj, castObjs, productionCompanies, streamingServices, 
+          runtime, runtimeMinutes, directorObj, castObjs, productionCompanies, streamingServices, collection,
           genres: (detail.genres || []).map((g: any) => ({...g, name: g.name === '履歴' ? '歴史' : (g.name === '謎' ? 'ミステリー' : g.name)}))
         });
 
@@ -432,7 +486,7 @@ export default function App() {
     return movies;
   }, [sortOrder]);
 
-  // 一括検索・確実なフェッチ処理（タグ検索内文字検索・公開中特殊フィルタ対応版）
+  // 一括検索・確実なフェッチ処理
   useEffect(() => {
     if (!isSearchActive && activeTab !== 'genre_view') { setDisplayList([]); setIsSearching(false); return; }
 
@@ -456,13 +510,9 @@ export default function App() {
           if (isNowPlaying) {
             return `https://api.themoviedb.org/3/movie/now_playing?api_key=${tmdbApiKey}&language=ja-JP&region=JP&page=${page}`;
           }
-          
-          // タグ選択中＋文字検索、または通常の文字検索
           if (searchTitle !== '') {
-            let searchUrl = `https://api.themoviedb.org/3/search/movie?api_key=${tmdbApiKey}&language=ja-JP&query=${encodeURIComponent(searchTitle)}&page=${page}&include_adult=${showAdult ? 'true' : 'false'}`;
-            return searchUrl;
+            return `https://api.themoviedb.org/3/search/movie?api_key=${tmdbApiKey}&language=ja-JP&query=${encodeURIComponent(searchTitle)}&page=${page}&include_adult=${showAdult ? 'true' : 'false'}`;
           }
-
           let url = `https://api.themoviedb.org/3/discover/movie?api_key=${tmdbApiKey}&language=ja-JP&sort_by=${sortParam}&page=${page}`;
           
           url += `&include_adult=${showAdult ? 'true' : 'false'}`;
@@ -493,8 +543,13 @@ export default function App() {
         let maxTotalPages = 1;
         let newNextApiPage = apiPage;
         
-        // 公開中の場合は初回5ページ(最大100件)を一気に取ってソート可能にする
-        if (isNowPlaying && apiPage === 1) {
+        if (searchCollection) {
+          const res = await fetch(`https://api.themoviedb.org/3/collection/${searchCollection.id}?api_key=${tmdbApiKey}&language=ja-JP`);
+          const data = await res.json();
+          if (data.parts) fetchedMovies = data.parts;
+          maxTotalPages = 1;
+          newNextApiPage = 2;
+        } else if (isNowPlaying && apiPage === 1) {
           const pagesToFetch = [1, 2, 3, 4, 5];
           const resArray = await Promise.all(pagesToFetch.map(p => fetch(buildUrl(p)).catch(()=>null)));
           const dataArray = await Promise.all(resArray.filter(r => r).map(r => (r as Response).json().catch(()=>({}))));
@@ -545,14 +600,12 @@ export default function App() {
         setTotalApiPages(maxTotalPages);
         setNextApiPage(newNextApiPage);
 
-        // 重複排除
         let uniqueMap = new Map();
         fetchedMovies.forEach(m => {
           if (!uniqueMap.has(m.id)) uniqueMap.set(m.id, m);
         });
         let uniqueResults = Array.from(uniqueMap.values());
 
-        // タグ選択中で検索バーに文字が入力されている場合のフロント補助フィルタ（指定タグを含んでいるか）
         if (selectedTags.length > 0 && searchTitle !== '') {
           uniqueResults = uniqueResults.filter((m: any) => {
             if (!m.genre_ids) return false;
@@ -560,7 +613,6 @@ export default function App() {
           });
         }
 
-        // 「公開中」専用の特殊ゴミデータフィルタ（ポスターなし or タグなし or (投票数3未満かつキャスト空欄)）
         if (isNowPlaying && !showIncomplete) {
           const checkedPublicMovies = await Promise.all(uniqueResults.map(async (m: any) => {
             if (!m.poster_path || !m.genre_ids || m.genre_ids.length === 0) return null;
@@ -621,7 +673,7 @@ export default function App() {
       } catch (err) {} finally { setIsSearching(false); }
     }, 400);
     return () => clearTimeout(delayDebounceFn);
-  }, [searchTitle, selectedTags, appliedFilters, forceSearch, activeTab, genreViewCategory, apiPage, sortOrder, getSortedBlock, searchPerson, showAdult, showIncomplete]);
+  }, [searchTitle, selectedTags, appliedFilters, forceSearch, activeTab, genreViewCategory, apiPage, sortOrder, getSortedBlock, searchPerson, searchCollection, showAdult, showIncomplete]);
 
   useEffect(() => {
     setApiPage(1);
@@ -633,7 +685,7 @@ export default function App() {
     setShowFilters(false);
     setApiPage(1);
     setNextApiPage(1);
-    if (searchTitle === '' && selectedTags.length === 0 && searchPerson === null && !tempFilters.enableYear && !tempFilters.enableRuntime && !tempFilters.enableRating) {
+    if (searchTitle === '' && selectedTags.length === 0 && searchPerson === null && searchCollection === null && !tempFilters.enableYear && !tempFilters.enableRuntime && !tempFilters.enableRating) {
       setForceSearch(true);
     } else {
       setForceSearch(false);
@@ -646,14 +698,27 @@ export default function App() {
 
   const toggleTagSelection = (genreId: string) => {
     setSelectedTags(prev => prev.includes(genreId) ? prev.filter(id => id !== genreId) : [...prev, genreId]);
-    setApiPage(1); setNextApiPage(1); setForceSearch(false); setSearchPerson(null);
+    setApiPage(1); setNextApiPage(1); setForceSearch(false); setSearchPerson(null); setSearchCollection(null);
   };
 
   const handlePersonSearch = (person: { id: number, name: string, type: 'cast' | 'director' }) => {
     setSearchTitle('');
     setSelectedTags([]);
     setSearchPerson(person);
+    setSearchCollection(null);
     setApiPage(1); 
+    setNextApiPage(1);
+    setForceSearch(false);
+    setActiveTab('home');
+    updateModalState(null);
+  };
+
+  const handleCollectionSearch = (collection: { id: number, name: string }) => {
+    setSearchTitle('');
+    setSelectedTags([]);
+    setSearchPerson(null);
+    setSearchCollection(collection);
+    setApiPage(1);
     setNextApiPage(1);
     setForceSearch(false);
     setActiveTab('home');
@@ -662,12 +727,19 @@ export default function App() {
   
   const clearPersonSearch = () => {
     setSearchPerson(null);
-    if (!searchTitle && selectedTags.length === 0 && !isFilterApplied) {
+    if (!searchTitle && selectedTags.length === 0 && !isFilterApplied && searchCollection === null) {
       resetSearch();
     } else {
-      setApiPage(1);
-      setNextApiPage(1);
-      setForceSearch(true);
+      setApiPage(1); setNextApiPage(1); setForceSearch(true);
+    }
+  };
+
+  const clearCollectionSearch = () => {
+    setSearchCollection(null);
+    if (!searchTitle && selectedTags.length === 0 && !isFilterApplied && searchPerson === null) {
+      resetSearch();
+    } else {
+      setApiPage(1); setNextApiPage(1); setForceSearch(true);
     }
   };
 
@@ -675,6 +747,7 @@ export default function App() {
     setSearchTitle('');
     setSelectedTags([]);
     setSearchPerson(null);
+    setSearchCollection(null);
     setTempFilters(defaultFilters);
     setAppliedFilters(defaultFilters);
     setShowFilters(false);
@@ -862,7 +935,8 @@ export default function App() {
     const hasReviewData = currentScore > 0 || !!collectionData?.aiContent || !!collectionData?.myReview;
 
     return (
-      <div className="absolute inset-0 bg-[#141414] z-[60] flex flex-col animate-in slide-in-from-bottom-10 fade-in duration-300">
+      <div className={`absolute inset-0 bg-[#141414] z-[60] flex flex-col ${swipeOutTarget === 'detail' ? 'slide-out-right' : 'animate-in slide-in-from-bottom-10 fade-in duration-300'}`}
+           onTouchStart={handleTouchStart} onTouchEnd={(e) => handleTouchEnd(e, 'detail')}>
         {renderAppHeader()}
         <header className="flex items-center justify-between p-4 bg-gradient-to-b from-black/80 to-transparent absolute top-[49px] left-0 right-0 z-50 pointer-events-none">
           <button onClick={() => updateModalState(null)} className="pointer-events-auto p-2.5 bg-black/60 backdrop-blur-md text-white rounded-full hover:bg-black/80 transition cursor-pointer">
@@ -916,6 +990,13 @@ export default function App() {
 
             <p className="text-xs text-zinc-300 leading-relaxed font-medium">{currentViewingMovie.apiSynopsis}</p>
 
+            {status === 'watched' && (collectionData?.aiContent || collectionData?.myReview) && (
+              <div className="space-y-4 pt-4 border-t border-zinc-800/80">
+                {collectionData?.aiContent && <div className="bg-zinc-900/60 p-4 rounded-xl border border-zinc-800 space-y-2"><h4 className="text-xs font-bold text-zinc-400">内容メモ</h4><p className="text-xs text-zinc-300 whitespace-pre-wrap leading-relaxed">{collectionData.aiContent}</p></div>}
+                {collectionData?.myReview && <div className="bg-zinc-900/60 p-4 rounded-xl border border-zinc-800 space-y-2"><h4 className="text-xs font-bold text-zinc-400">自分の感想</h4><p className="text-xs text-zinc-300 whitespace-pre-wrap leading-relaxed">{collectionData.myReview}</p></div>}
+              </div>
+            )}
+
             <div className="space-y-4 pt-4 border-t border-zinc-800/80 text-xs">
               {isExtraLoading ? (
                 <div className="flex items-center justify-center py-4 text-zinc-500 gap-2"><Loader2 size={16} className="animate-spin text-red-500" /></div>
@@ -938,14 +1019,39 @@ export default function App() {
                     </div>
                   </div>
 
+                  {movieExtraDetails.collection && (
+                    <div className="pt-2">
+                      <span className="text-zinc-500 block mb-2">シリーズ</span>
+                      <button 
+                        onClick={() => handleCollectionSearch(movieExtraDetails.collection)}
+                        className="text-zinc-200 font-bold hover:underline cursor-pointer text-sm line-clamp-2 text-left"
+                      >
+                        {movieExtraDetails.collection.name}
+                      </button>
+                    </div>
+                  )}
+
                   {movieExtraDetails.genres && movieExtraDetails.genres.length > 0 && (
                     <div className="pt-2">
                       <span className="text-zinc-500 block mb-2">作品タグ</span>
                       <div className="flex flex-wrap gap-2 pb-2">
                         {movieExtraDetails.genres.map((g: any) => (
                           <button key={g.id} onClick={() => {
-                            updateModalState(null); setActiveTab('home'); setSelectedTags([g.id.toString()]); setSearchTitle(''); setSearchPerson(null); setShowFilters(false); setApiPage(1); setNextApiPage(1); setForceSearch(false); setSortOrder('release_desc');
+                            updateModalState(null); setActiveTab('home'); setSelectedTags([g.id.toString()]); setSearchTitle(''); setSearchPerson(null); setSearchCollection(null); setShowFilters(false); setApiPage(1); setNextApiPage(1); setForceSearch(false); setSortOrder('release_desc');
                           }} className="px-3 py-1 rounded-full text-[11px] font-bold bg-zinc-900 text-zinc-300 border border-zinc-700 hover:text-white cursor-pointer transition-colors">{g.name}</button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {movieExtraDetails.streamingServices && movieExtraDetails.streamingServices.length > 0 && (
+                    <div className="pt-2">
+                      <span className="text-zinc-500 block mb-2">配信サービス</span>
+                      <div className="flex flex-wrap gap-3 pb-2">
+                        {movieExtraDetails.streamingServices.map((s: any, idx: number) => (
+                          <a key={idx} href={s.url} target="_blank" rel="noopener noreferrer" className="block active:scale-95 transition-transform cursor-pointer">
+                            <img src={s.logo} alt={s.name} className="w-10 h-10 rounded-xl shadow-md border border-zinc-800" />
+                          </a>
                         ))}
                       </div>
                     </div>
@@ -966,17 +1072,10 @@ export default function App() {
                 </div>
               ) : null}
             </div>
-
-            {status === 'watched' && (
-              <div className="space-y-4 pt-4 border-t border-zinc-800">
-                {collectionData.aiContent && <div className="bg-zinc-900/60 p-4 rounded-xl border border-zinc-800 space-y-2"><h4 className="text-xs font-bold text-zinc-400">内容</h4><p className="text-xs text-zinc-300 whitespace-pre-wrap leading-relaxed">{collectionData.aiContent}</p></div>}
-                {collectionData.myReview && <div className="bg-zinc-900/60 p-4 rounded-xl border border-zinc-800 space-y-2"><h4 className="text-xs font-bold text-zinc-400">自分の感想</h4><p className="text-xs text-zinc-300 whitespace-pre-wrap leading-relaxed">{collectionData.myReview}</p></div>}
-              </div>
-            )}
           </div>
         </div>
 
-        <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-[#141414] via-[#141414]/95 to-transparent pt-12 border-t border-zinc-800/50 z-50 pointer-events-auto">
+        <div className="absolute bottom-0 left-0 right-0 p-3 pb-safe bg-gradient-to-t from-[#141414] via-[#141414]/95 to-transparent pt-8 z-50 pointer-events-auto">
           {status === 'none' && (
             <div className="flex gap-3">
               <button onClick={() => handleAddWatchlist(currentViewingMovie)} className="flex-1 py-3.5 bg-zinc-800 text-white font-bold rounded-lg flex justify-center items-center gap-2 hover:bg-zinc-700 active:scale-95 transition-all text-sm border border-zinc-700 cursor-pointer">
@@ -1051,7 +1150,7 @@ export default function App() {
 
           <div className="space-y-3">
             <div className="flex justify-between items-end">
-              <label className="text-sm font-bold text-purple-400 flex items-center gap-2"><Wand2 size={16} /> 内容</label>
+              <label className="text-sm font-bold text-purple-400 flex items-center gap-2"><Wand2 size={16} /> 内容メモ</label>
               <button onClick={handleGenerateAiPlot} disabled={isAiLoading} className="text-xs px-3 py-1.5 bg-purple-600/20 text-purple-400 rounded-full font-bold flex items-center gap-1 active:scale-95 transition border border-purple-500/30 cursor-pointer">{isAiLoading ? <Loader2 size={14} className="animate-spin" /> : <Wand2 size={14} />} 自動生成</button>
             </div>
             <textarea value={editAiContent} onChange={(e) => setEditAiContent(e.target.value)} placeholder="映画の内容や展開を記録..." className="w-full bg-zinc-900 border border-purple-900/30 rounded-xl p-4 text-zinc-200 text-sm focus:outline-none min-h-[130px] resize-none transition" />
@@ -1087,7 +1186,7 @@ export default function App() {
                 <input 
                   type="text" 
                   value={searchTitle} 
-                  onChange={(e) => { setSearchTitle(e.target.value); setApiPage(1); setNextApiPage(1); setForceSearch(false); setSearchPerson(null); }} 
+                  onChange={(e) => { setSearchTitle(e.target.value); setApiPage(1); setNextApiPage(1); setForceSearch(false); setSearchPerson(null); setSearchCollection(null); }} 
                   placeholder="映画を検索..." 
                   className="w-full bg-zinc-900 border border-zinc-800 rounded-lg py-2.5 pl-10 pr-8 text-white font-medium focus:outline-none focus:border-zinc-500 focus:ring-1 focus:ring-zinc-500 transition-all placeholder:text-zinc-500 ios-safe-input" 
                 />
@@ -1108,6 +1207,15 @@ export default function App() {
                 <span className="text-zinc-200 text-[11px] font-bold bg-zinc-800 px-3 py-1 rounded-full border border-zinc-700 flex items-center gap-1 shadow-md">
                   {searchPerson.type === 'director' ? '監督' : 'キャスト'}: {searchPerson.name}
                   <button onClick={clearPersonSearch} className="ml-1 text-zinc-400 hover:text-white cursor-pointer"><X size={14} /></button>
+                </span>
+              </div>
+            )}
+
+            {searchCollection && (
+              <div className="flex items-center gap-2 pt-0.5 px-1">
+                <span className="text-zinc-200 text-[11px] font-bold bg-zinc-800 px-3 py-1 rounded-full border border-zinc-700 flex items-center gap-1 shadow-md">
+                  シリーズ: {searchCollection.name}
+                  <button onClick={clearCollectionSearch} className="ml-1 text-zinc-400 hover:text-white cursor-pointer"><X size={14} /></button>
                 </span>
               </div>
             )}
@@ -1184,9 +1292,10 @@ export default function App() {
         </div>
 
         {/* スクロールコンテンツエリア */}
-        <div className="flex-1 overflow-y-auto pb-6">
+        <div className="flex-1 overflow-hidden relative">
           {isSearchActive ? (
-            <div className="px-4 pt-4">
+            <div className={`w-full h-full overflow-y-auto pb-6 px-4 pt-4 ${swipeOutTarget === 'search' ? 'slide-out-right' : ''}`}
+                 onTouchStart={handleTouchStart} onTouchEnd={(e) => handleTouchEnd(e, 'search')}>
               {visibleSearchResults.length > 0 ? (
                 <>
                   <div className="grid grid-cols-3 gap-2">
@@ -1213,7 +1322,7 @@ export default function App() {
               ) : (!isSearching && <p className="text-zinc-500 text-xs text-center mt-10">作品が見つかりません</p>)}
             </div>
           ) : (
-            <div className="space-y-6 pb-8">
+            <div className="w-full h-full overflow-y-auto space-y-6 pb-8">
               {isHomeLoading ? (
                 <div className="flex flex-col items-center justify-center h-64 gap-3 text-zinc-500"><Loader2 size={32} className="animate-spin text-red-600" /><p className="text-xs font-bold">取得中...</p></div>
               ) : (
@@ -1290,21 +1399,24 @@ export default function App() {
     const visibleGenreList = displayList;
 
     return (
-      <div className="w-full h-full flex flex-col animate-in fade-in duration-200 min-h-0">
+      <div className={`w-full h-full flex flex-col min-h-0 ${swipeOutTarget === 'genre' ? 'slide-out-right' : 'animate-in fade-in duration-200'}`}
+           onTouchStart={handleTouchStart} onTouchEnd={(e) => handleTouchEnd(e, 'genre')}>
         {renderAppHeader()}
         <header className="shrink-0 bg-[#141414]/90 backdrop-blur-md px-4 py-3 flex items-center justify-between z-30 border-b border-zinc-800">
           <div className="flex items-center gap-3">
             <button onClick={() => { setActiveTab('home'); setSortOrder('release_desc'); setDisplayList([]); }} className="text-zinc-400 hover:text-white p-1 cursor-pointer"><ArrowLeft size={22} /></button>
             <h2 className="text-base font-bold text-white">{genreViewCategory}</h2>
           </div>
-          <select value={sortOrder} onChange={e => setSortOrder(e.target.value)} className="bg-zinc-900 border border-zinc-800 text-zinc-200 text-[11px] font-medium rounded-lg px-2 py-1 focus:outline-none cursor-pointer">
-            <option value="release_desc">公開日が新しい順</option>
-            <option value="release_asc">公開日が古い順</option>
-            <option value="runtime_desc">上映時間が長い順</option>
-            <option value="runtime_asc">上映時間が短い順</option>
-            <option value="rating_desc">評価が高い順</option>
-            <option value="rating_asc">評価が低い順</option>
-          </select>
+          {genreViewCategory === '公開中' && (
+            <select value={sortOrder} onChange={e => setSortOrder(e.target.value)} className="bg-zinc-900 border border-zinc-800 text-zinc-200 text-[11px] font-medium rounded-lg px-2 py-1 focus:outline-none cursor-pointer">
+              <option value="release_desc">公開日が新しい順</option>
+              <option value="release_asc">公開日が古い順</option>
+              <option value="runtime_desc">上映時間が長い順</option>
+              <option value="runtime_asc">上映時間が短い順</option>
+              <option value="rating_desc">評価が高い順</option>
+              <option value="rating_asc">評価が低い順</option>
+            </select>
+          )}
         </header>
         <div className="flex-1 overflow-y-auto p-4">
           {visibleGenreList.length > 0 ? (
@@ -1423,8 +1535,8 @@ export default function App() {
   };
 
   return (
-    <div className="bg-black h-[100dvh] w-full flex justify-center font-sans selection:bg-red-900/30 text-zinc-200 overflow-hidden app-wrapper">
-      <div className="w-full max-w-md h-full bg-[#141414] shadow-2xl relative border-x border-zinc-900 flex flex-col overflow-hidden">
+    <div className="bg-[#141414] h-[100dvh] w-full flex justify-center font-sans selection:bg-red-900/30 text-zinc-200 overflow-hidden app-wrapper">
+      <div className="w-full max-w-md h-full bg-[#141414] shadow-2xl relative flex flex-col overflow-hidden">
 
         {/* ハンバーガーメニュー */}
         <div 
@@ -1451,16 +1563,13 @@ export default function App() {
               </div>
               <div className="space-y-6">
                 <div className="flex items-center justify-between">
-                  <label className="text-sm font-bold text-zinc-300">アダルト作品を表示</label>
+                  <label className="text-sm font-bold text-zinc-300">センシティブ作品を表示</label>
                   <input type="checkbox" checked={showAdult} onChange={e => setShowAdult(e.target.checked)} className="accent-red-600 w-4 h-4 cursor-pointer" />
                 </div>
                 <div className="flex items-center justify-between">
-                  <label className="text-sm font-bold text-zinc-300">低評価・不完全データを表示</label>
+                  <label className="text-sm font-bold text-zinc-300">非公式作品を表示</label>
                   <input type="checkbox" checked={showIncomplete} onChange={e => setShowIncomplete(e.target.checked)} className="accent-red-600 w-4 h-4 cursor-pointer" />
                 </div>
-                <p className="text-[11px] text-zinc-500 mt-2 leading-relaxed">
-                  ※オフにすると、ポスターがない作品、投票数が極端に少ない作品（3未満）、ジャンル未設定の作品が自動で非表示になります。
-                </p>
               </div>
             </div>
           )}
@@ -1531,6 +1640,7 @@ export default function App() {
           overflow: hidden !important; 
           overscroll-behavior: none !important;
           touch-action: pan-y;
+          background-color: #141414;
         }
         #root, .app-wrapper {
           height: 100dvh;
@@ -1553,6 +1663,13 @@ export default function App() {
         @keyframes zoomIn {
           from { opacity: 0; transform: scale(0.95); }
           to { opacity: 1; transform: scale(1); }
+        }
+        @keyframes slideOutRight {
+          from { transform: translateX(0); opacity: 1; }
+          to { transform: translateX(100%); opacity: 0; }
+        }
+        .slide-out-right {
+          animation: slideOutRight 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
         }
         
         /* スライダーのタッチ判定を拡大 (40px) */
