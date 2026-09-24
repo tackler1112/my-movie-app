@@ -1695,7 +1695,6 @@ const handleAppTitleClick = () => {
         </div>
 
         {/* --- 固定フッター --- */}
-        {/* --- 固定フッター --- */}
         <nav className="shrink-0 bg-[#141414]/98 backdrop-blur-xl border-t border-zinc-800 flex justify-around items-center py-2.5 px-3 pb-safe z-[150] relative">
           
           <button id="tab-btn-home" onClick={() => handleTabClick('home')} className={`flex flex-col items-center py-1 px-3 transition cursor-pointer ${activeTab === 'home' || activeTab === 'genre_view' ? 'text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>
@@ -1723,7 +1722,7 @@ const handleAppTitleClick = () => {
               <CheckCircle2 size={24} />
               {footerBadges.watched > 0 && (
                 {/* ここで「鑑賞済み」の数字位置だけを調整できます（pl-[1px] で右に押し出しています） */}
-                <span className="absolute -top-1 -right-2 bg-red-600 text-white text-[10px] font-bold w-4 h-4 flex items-center justify-center rounded-full shadow-md pt-[1px] pl-[1px]">{footerBadges.watched > 99 ? '99+' : footerBadges.watched}</span>
+                <span className="absolute -top-1 -right-2 bg-red-600 text-white text-[10px] font-bold w-4 h-4 flex items-center justify-center rounded-full shadow-md pt-[0px] pl-[2px]">{footerBadges.watched > 99 ? '99+' : footerBadges.watched}</span>
               )}
             </div>
             <span className="text-xs mt-1 font-bold">鑑賞済み</span>
