@@ -1695,26 +1695,42 @@ const handleAppTitleClick = () => {
         </div>
 
         {/* --- 固定フッター --- */}
+        {/* --- 固定フッター --- */}
         <nav className="shrink-0 bg-[#141414]/98 backdrop-blur-xl border-t border-zinc-800 flex justify-around items-center py-2.5 px-3 pb-safe z-[150] relative">
-          <button id="tab-btn-home" onClick={() => handleTabClick('home')} className={`flex flex-col items-center py-1 px-3 transition cursor-pointer relative ${activeTab === 'home' || activeTab === 'genre_view' ? 'text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>
-            <Home size={24} />
+          
+          <button id="tab-btn-home" onClick={() => handleTabClick('home')} className={`flex flex-col items-center py-1 px-3 transition cursor-pointer ${activeTab === 'home' || activeTab === 'genre_view' ? 'text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>
+            <div className="relative">
+              <Home size={24} />
+            </div>
             <span className="text-xs mt-1 font-bold">ホーム</span>
           </button>
-          <button id="tab-btn-watchlist" onClick={() => handleTabClick('watchlist')} className={`flex flex-col items-center py-1 px-3 transition cursor-pointer relative ${activeTab === 'watchlist' ? 'text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>
-            <Bookmark size={24} />
-            {footerBadges.watchlist > 0 && (
-              <span className="absolute top-0.5 right-2 bg-red-600 text-white text-[10px] font-bold w-4 h-4 flex items-center justify-center rounded-full shadow-md pt-[1px]">{footerBadges.watchlist > 99 ? '99+' : footerBadges.watchlist}</span>
-            )}
+
+          {/* ▼ みたい！リスト ▼ */}
+          <button id="tab-btn-watchlist" onClick={() => handleTabClick('watchlist')} className={`flex flex-col items-center py-1 px-3 transition cursor-pointer ${activeTab === 'watchlist' ? 'text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>
+            <div className="relative">
+              <Bookmark size={24} />
+              {footerBadges.watchlist > 0 && (
+                {/* ここで「みたいリスト」の数字位置だけを調整できます（現在は pt-[1px] のみ） */}
+                <span className="absolute -top-1 -right-2 bg-red-600 text-white text-[10px] font-bold w-4 h-4 flex items-center justify-center rounded-full shadow-md pt-[1px]">{footerBadges.watchlist > 99 ? '99+' : footerBadges.watchlist}</span>
+              )}
+            </div>
             <span className="text-xs mt-1 font-bold">みたい！</span>
           </button>
-          <button id="tab-btn-watched" onClick={() => handleTabClick('watched')} className={`flex flex-col items-center py-1 px-3 transition cursor-pointer relative ${activeTab === 'watched' ? 'text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>
-            <CheckCircle2 size={24} />
-            {footerBadges.watched > 0 && (
-              <span className="absolute top-0.5 right-2 bg-red-600 text-white text-[10px] font-bold w-4 h-4 flex items-center justify-center rounded-full shadow-md pt-[1px]">{footerBadges.watched > 99 ? '99+' : footerBadges.watched}</span>
-            )}
+
+          {/* ▼ 鑑賞済み ▼ */}
+          <button id="tab-btn-watched" onClick={() => handleTabClick('watched')} className={`flex flex-col items-center py-1 px-3 transition cursor-pointer ${activeTab === 'watched' ? 'text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>
+            <div className="relative">
+              <CheckCircle2 size={24} />
+              {footerBadges.watched > 0 && (
+                {/* ここで「鑑賞済み」の数字位置だけを調整できます（pl-[1px] で右に押し出しています） */}
+                <span className="absolute -top-1 -right-2 bg-red-600 text-white text-[10px] font-bold w-4 h-4 flex items-center justify-center rounded-full shadow-md pt-[1px] pl-[1px]">{footerBadges.watched > 99 ? '99+' : footerBadges.watched}</span>
+              )}
+            </div>
             <span className="text-xs mt-1 font-bold">鑑賞済み</span>
           </button>
+
         </nav>
+
       </div>
 
       <style dangerouslySetInnerHTML={{__html: `
