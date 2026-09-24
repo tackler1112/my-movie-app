@@ -282,29 +282,34 @@ export default function App() {
     if (touchStartX.current > 100) return;
 
     if (diffX > 50 && Math.abs(diffY) < 60) {
-      isSwipingOutRef.current = true;
-      setSwipeOutTarget(type);
-
-      setTimeout(() => {
-        if (type === 'detail') updateModalState(null);
-        if (type === 'genre') { setActiveTab('home'); setDisplayList([]); }
-        if (type === 'search') {
-          setSearchTitle('');
-          setSelectedTags([]);
-          setSearchPerson(null);
-          setSearchCollection(null);
-          setTempFilters(defaultFilters);
-          setAppliedFilters(defaultFilters);
-          setForceSearch(false);
-          setShowFilters(false);
-          setDisplayList([]);
-          setApiPage(1);
-          setNextApiPage(1);
-          setSortOrder('release_desc');
-        }
-        setSwipeOutTarget(null);
-        isSwipingOutRef.current = false;
-      }, 250);
+      if (type === 'detail') {
+        // 作品詳細画面のみスライドアニメーションを維持
+        isSwipingOutRef.current = true;
+        setSwipeOutTarget(type);
+        setTimeout(() => {
+          updateModalState(null);
+          setSwipeOutTarget(null);
+          isSwipingOutRef.current = false;
+        }, 250);
+      } else if (type === 'genre') {
+        // 全て見る画面：フリックで即時戻る
+        setActiveTab('home');
+        setDisplayList([]);
+      } else if (type === 'search') {
+        // 検索後画面：フリックで即時リセット
+        setSearchTitle('');
+        setSelectedTags([]);
+        setSearchPerson(null);
+        setSearchCollection(null);
+        setTempFilters(defaultFilters);
+        setAppliedFilters(defaultFilters);
+        setForceSearch(false);
+        setShowFilters(false);
+        setDisplayList([]);
+        setApiPage(1);
+        setNextApiPage(1);
+        setSortOrder('release_desc');
+      }
     }
   };
 
@@ -1540,16 +1545,16 @@ export default function App() {
             {renderBaseHome()}
           </div>
 
-          {/* レイヤー1: Search Result（手前に被さり、丸ごとスライド対象） */}
-          {(isSearchActive || swipeOutTarget === 'search') && (
-            <div className={`w-full h-full flex flex-col absolute inset-0 z-10 bg-[#141414] ${swipeOutTarget === 'search' ? 'slide-out-right' : 'animate-in fade-in'}`}
+          {/* レイヤー1: Search Result（スライドアニメーション削除） */}
+          {isSearchActive && (
+            <div className="w-full h-full flex flex-col absolute inset-0 z-10 bg-[#141414] animate-in fade-in"
                  onTouchStart={handleTouchStart} onTouchEnd={(e) => handleTouchEnd(e, 'search')}>
               {renderSearchLayer()}
             </div>
           )}
 
-          {/* レイヤー2: Genre View（手前に被さり、丸ごとスライド対象） */}
-          <div style={{ display: activeTab === 'genre_view' ? 'flex' : 'none' }} className={`w-full h-full flex-col absolute inset-0 z-20 bg-[#141414] ${swipeOutTarget === 'genre' ? 'slide-out-right' : 'animate-in fade-in duration-200'}`}
+          {/* レイヤー2: Genre View（スライドアニメーション削除） */}
+          <div style={{ display: activeTab === 'genre_view' ? 'flex' : 'none' }} className="w-full h-full flex-col absolute inset-0 z-20 bg-[#141414] animate-in fade-in duration-200"
                onTouchStart={handleTouchStart} onTouchEnd={(e) => handleTouchEnd(e, 'genre')}>
             {renderGenreView()}
           </div>
