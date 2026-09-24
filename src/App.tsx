@@ -283,33 +283,34 @@ export default function App() {
     if (touchStartX.current > 100) return;
 
     if (diffX > 50 && Math.abs(diffY) < 60) {
+      // 1. スライド開始のトリガーを引き、アニメーションだけを開始する
       setSwipeOutTarget(type);
-      isSwipingOutRef.current = true; // スライド中フラグON
-      
-      // スライド開始と同時に、検索条件（文字やタグ）を瞬時にクリアする
-      if (type === 'search') {
-        setSearchTitle('');
-        setSelectedTags([]);
-        setSearchPerson(null);
-        setSearchCollection(null);
-        setTempFilters(defaultFilters);
-        setAppliedFilters(defaultFilters);
-        setForceSearch(false);
-        setShowFilters(false);
-      }
 
+      // 2. アニメーションが完了し画面外へ消えた後（0.25秒後）に状態をリセットする
       setTimeout(() => {
-        if (type === 'detail') updateModalState(null);
-        if (type === 'genre') { setActiveTab('home'); setDisplayList([]); }
+        if (type === 'detail') {
+          updateModalState(null);
+        }
+        if (type === 'genre') { 
+          setActiveTab('home'); 
+          setDisplayList([]); 
+        }
         if (type === 'search') {
+          setSearchTitle('');
+          setSelectedTags([]);
+          setSearchPerson(null);
+          setSearchCollection(null);
+          setTempFilters(defaultFilters);
+          setAppliedFilters(defaultFilters);
+          setForceSearch(false);
+          setShowFilters(false);
           setDisplayList([]);
           setApiPage(1);
           setNextApiPage(1);
           setSortOrder('release_desc');
         }
         setSwipeOutTarget(null);
-        isSwipingOutRef.current = false; // スライド中フラグOFF
-      }, 250); // アニメーション終了時間と同期
+      }, 250);
     }
   };
 
@@ -996,11 +997,22 @@ export default function App() {
     const hasReviewData = currentScore > 0 || !!collectionData?.aiContent || !!collectionData?.myReview;
 
     return (
-      <div className="absolute inset-0 z-[60] flex flex-col pointer-events-none"
+      // ↓↓↓ 画面全体（ヘッダー含む）をスライド対象にする ↓↓↓
+      <div className={`absolute inset-0 z-[60] flex flex-col bg-[#141414] ${swipeOutTarget === 'detail' ? 'slide-out-right' : 'animate-in slide-in-from-bottom-10 fade-in duration-300'}`}
            onTouchStart={handleTouchStart} onTouchEnd={(e) => handleTouchEnd(e, 'detail')}>
         
-        <div className="shrink-0 relative z-50 pointer-events-auto bg-[#141414]">
+        <div className="shrink-0 relative z-50">
           {renderAppHeader()}
+          <header className="flex items-center justify-between p-4 bg-gradient-to-b from-black/80 to-transparent absolute top-[49px] left-0 right-0 z-50 pointer-events-none">
+            <button onClick={() => updateModalState(null)} className="pointer-events-auto p-2.5 bg-black/60 backdrop-blur-md text-white rounded-full hover:bg-black/80 transition cursor-pointer">
+              <ArrowLeft size={20} />
+            </button>
+            {canDelete && (
+              <button onClick={() => updateModalState('delete_confirm')} className="pointer-events-auto p-2.5 bg-red-600/80 backdrop-blur-md text-white rounded-full hover:bg-red-700 transition cursor-pointer">
+                <Trash2 size={18} />
+              </button>
+            )}
+          </header>
         </div>
 
         {currentModalMode === 'delete_confirm' && (
@@ -1015,21 +1027,8 @@ export default function App() {
           </div>
         )}
 
-        {/* ↓ここから下が「一緒にスライドして消える」要素群 */}
-        <div className={`flex-1 flex flex-col overflow-hidden relative pointer-events-auto bg-[#141414] ${swipeOutTarget === 'detail' ? 'slide-out-right' : 'animate-in slide-in-from-bottom-10 fade-in duration-300'}`}>
-          
-          {/* 戻るボタンや暗い領域もスライド用divの中に入れる（top-0に変更） */}
-          <header className="flex items-center justify-between p-4 bg-gradient-to-b from-black/80 to-transparent absolute top-0 left-0 right-0 z-50 pointer-events-none">
-            <button onClick={() => updateModalState(null)} className="pointer-events-auto p-2.5 bg-black/60 backdrop-blur-md text-white rounded-full hover:bg-black/80 transition cursor-pointer">
-              <ArrowLeft size={20} />
-            </button>
-            {canDelete && (
-              <button onClick={() => updateModalState('delete_confirm')} className="pointer-events-auto p-2.5 bg-red-600/80 backdrop-blur-md text-white rounded-full hover:bg-red-700 transition cursor-pointer">
-                <Trash2 size={18} />
-              </button>
-            )}
-          </header>
-
+        {/* ↓中身のレイアウト（背景指定を親に移したのでここは透明でOK） */}
+        <div className="flex-1 flex flex-col overflow-hidden relative pointer-events-auto">
           <div className="flex-1 overflow-y-auto pb-28">
             <div className="relative w-full aspect-[2/3] max-h-[50vh] bg-zinc-900 flex justify-center overflow-hidden">
               <div className="absolute inset-0 bg-cover bg-center blur-xl opacity-40 scale-110" style={{ backgroundImage: `url(${currentViewingMovie.posterUrl})` }} />
@@ -1234,7 +1233,8 @@ export default function App() {
       <div className="w-full h-full flex flex-col min-h-0">
         {renderAppHeader()}
         
-        <div className="shrink-0 z-30 bg-[#141414]/95 backdrop-blur-md pt-3 pb-3 px-4 border-b border-zinc-800/50">
+        {/* ↓↓↓ transition-opacity を追加し、スワイプ中は opacity-0 にして見えなくする ↓↓↓ */}
+        <div className={`shrink-0 z-30 bg-[#141414]/95 backdrop-blur-md pt-3 pb-3 px-4 border-b border-zinc-800/50 transition-opacity duration-200 ${swipeOutTarget === 'search' ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
           <div className="flex flex-col gap-2.5 relative">
             <div className="flex gap-2 relative">
               <div className="relative flex-1">
@@ -1453,16 +1453,13 @@ export default function App() {
     const visibleGenreList = displayList;
 
     return (
-      <div className="w-full h-full flex flex-col min-h-0 pointer-events-none"
+      // ↓↓↓ 画面全体（ヘッダー含む）をスライド対象にする ↓↓↓
+      <div className={`w-full h-full flex flex-col min-h-0 bg-[#141414] ${swipeOutTarget === 'genre' ? 'slide-out-right' : 'animate-in fade-in duration-200'}`}
            onTouchStart={handleTouchStart} onTouchEnd={(e) => handleTouchEnd(e, 'genre')}>
         
-        <div className="shrink-0 pointer-events-auto bg-[#141414]">
+        <div className="shrink-0">
           {renderAppHeader()}
-        </div>
-
-        {/* ↓ここから下が一緒にスライドする要素群（中ヘッダーを含む） */}
-        <div className={`flex-1 flex flex-col min-h-0 pointer-events-auto bg-[#141414] ${swipeOutTarget === 'genre' ? 'slide-out-right' : 'animate-in fade-in duration-200'}`}>
-          <header className="shrink-0 bg-[#141414]/90 backdrop-blur-md px-4 py-3 flex items-center justify-between z-30 border-b border-zinc-800">
+          <header className="bg-[#141414]/90 backdrop-blur-md px-4 py-3 flex items-center justify-between z-30 border-b border-zinc-800">
             <div className="flex items-center gap-3">
               <button onClick={() => { setActiveTab('home'); setSortOrder('release_desc'); setDisplayList([]); }} className="text-zinc-400 hover:text-white p-1 cursor-pointer"><ArrowLeft size={22} /></button>
               <h2 className="text-base font-bold text-white">{genreViewCategory}</h2>
@@ -1478,33 +1475,33 @@ export default function App() {
               </select>
             )}
           </header>
+        </div>
 
-          <div className="flex-1 overflow-y-auto p-4">
-            {visibleGenreList.length > 0 ? (
-              <>
-                <div className="grid grid-cols-3 gap-2">
-                  {visibleGenreList.map((movie: any) => {
-                    const status = getCollectionData(movie.id)?.status;
-                    return (
-                      <div key={movie.id} onClick={() => openDetailModal(movie, 'genre_view')} className="cursor-pointer active:scale-95 transition-transform group relative">
-                        {movie.posterUrl ? <img src={movie.posterUrl} className="w-full aspect-[2/3] object-cover rounded-md shadow-md bg-zinc-800 group-hover:brightness-75" /> : <div className="w-full aspect-[2/3] bg-zinc-800 rounded-md shadow-md flex items-center justify-center p-2 text-center text-[10px] text-zinc-500">{movie.title}</div>}
-                        {status && <div className="absolute top-1 right-1 bg-black/70 rounded-full p-1 backdrop-blur-md border border-white/10 z-10">{status === 'watched' ? <CheckCircle2 size={12} className="text-green-500" /> : <Bookmark size={12} className="text-white" />}</div>}
-                      </div>
-                    );
-                  })}
+        <div className="flex-1 overflow-y-auto p-4">
+          {visibleGenreList.length > 0 ? (
+            <>
+              <div className="grid grid-cols-3 gap-2">
+                {visibleGenreList.map((movie: any) => {
+                  const status = getCollectionData(movie.id)?.status;
+                  return (
+                    <div key={movie.id} onClick={() => openDetailModal(movie, 'genre_view')} className="cursor-pointer active:scale-95 transition-transform group relative">
+                      {movie.posterUrl ? <img src={movie.posterUrl} className="w-full aspect-[2/3] object-cover rounded-md shadow-md bg-zinc-800 group-hover:brightness-75" /> : <div className="w-full aspect-[2/3] bg-zinc-800 rounded-md shadow-md flex items-center justify-center p-2 text-center text-[10px] text-zinc-500">{movie.title}</div>}
+                      {status && <div className="absolute top-1 right-1 bg-black/70 rounded-full p-1 backdrop-blur-md border border-white/10 z-10">{status === 'watched' ? <CheckCircle2 size={12} className="text-green-500" /> : <Bookmark size={12} className="text-white" />}</div>}
+                    </div>
+                  );
+                })}
+              </div>
+              {nextApiPage <= totalApiPages && (
+                <div className="py-6 flex justify-center">
+                  <button onClick={() => { if(!isSearching){ setApiPage(nextApiPage); } }} disabled={isSearching} className="px-6 py-2 bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-bold rounded-full transition disabled:opacity-50 flex items-center gap-2 cursor-pointer shadow-lg">
+                    {isSearching ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />} さらに読み込む
+                  </button>
                 </div>
-                {nextApiPage <= totalApiPages && (
-                  <div className="py-6 flex justify-center">
-                    <button onClick={() => { if(!isSearching){ setApiPage(nextApiPage); } }} disabled={isSearching} className="px-6 py-2 bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-bold rounded-full transition disabled:opacity-50 flex items-center gap-2 cursor-pointer shadow-lg">
-                      {isSearching ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />} さらに読み込む
-                    </button>
-                  </div>
-                )}
-              </>
-            ) : (
-              <div className="flex justify-center mt-10"><Loader2 size={24} className="animate-spin text-red-600" /></div>
-            )}
-          </div>
+              )}
+            </>
+          ) : (
+            <div className="flex justify-center mt-10"><Loader2 size={24} className="animate-spin text-red-600" /></div>
+          )}
         </div>
       </div>
     );
