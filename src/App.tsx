@@ -146,6 +146,8 @@ const castCheckCache = new Map<string, boolean>();
 export default function App() {
   const [activeTab, setActiveTab] = useState('home');
   const [myCollection, setMyCollection] = useState<any[]>([]);
+  const [footerBadges, setFooterBadges] = useState({ watchlist: 0, watched: 0 });
+  const [unreadItems, setUnreadItems] = useState({ watchlist: new Set<string>(), watched: new Set<string>() });
 
   const [tabStates, setTabStates] = useState<Record<string, { modalMode: string | null, viewingMovie: any | null }>>({
     home: { modalMode: null, viewingMovie: null },
@@ -756,7 +758,17 @@ export default function App() {
   };
 
   const openDetailModal = (movie: any, originTab: string) => {
-    setFromTab(originTab); updateModalState('detail', movie);
+    setFromTab(originTab); 
+    updateModalState('detail', movie);
+    
+    // 詳細を開いたら、その作品の「新着ドット丸」を消す
+    setUnreadItems(prev => {
+      const nwList = new Set(prev.watchlist);
+      const nWatched = new Set(prev.watched);
+      nwList.delete(movie.id);
+      nWatched.delete(movie.id);
+      return { watchlist: nwList, watched: nWatched };
+    });
   };
 
   const openReviewModal = (movie: any) => {
@@ -828,6 +840,12 @@ export default function App() {
       updateModalState(null); 
       const newEntry = { movieId: movie.id, movieData: movie, status: 'watchlist', updatedAt: Date.now() };
       setMyCollection(prev => [...prev.filter(item => item.movieId !== movie.id), newEntry]);
+      
+      // 別タブにいるなら数字バッジを増やす
+      if (activeTab !== 'watchlist') setFooterBadges(prev => ({ ...prev, watchlist: prev.watchlist + 1 }));
+      // 新着ドット丸をつける
+      setUnreadItems(prev => ({ ...prev, watchlist: new Set(prev.watchlist).add(movie.id) }));
+      
       await saveToSupabase(newEntry);
     });
   };
@@ -849,14 +867,27 @@ export default function App() {
       score: existing?.score || 0.0, aiContent: existing?.aiContent || '', myReview: existing?.myReview || '', updatedAt: Date.now()
     };
     setMyCollection(prev => [...prev.filter(item => item.movieId !== confirmMovie.id), newEntry]);
+    
+    // ウォッチリストから消し、鑑賞済みに新着ドット丸をつける
+    setUnreadItems(prev => {
+      const nwList = new Set(prev.watchlist);
+      nwList.delete(confirmMovie.id);
+      const nWatched = new Set(prev.watched);
+      nWatched.add(confirmMovie.id);
+      return { watchlist: nwList, watched: nWatched };
+    });
     saveToSupabase(newEntry);
 
     if (doReview) {
+      if (activeTab === 'watchlist') setUnreadItems(prev => ({ ...prev, watchlist: new Set() }));
+      setFooterBadges(prev => ({ ...prev, watched: 0 }));
       setActiveTab('watched');
       setTabStates(prev => ({ 
         ...prev, watchlist: { modalMode: null, viewingMovie: null }, watched: { modalMode: 'review', viewingMovie: confirmMovie } 
       }));
       setEditScore(existing?.score || 0.0); setEditAiContent(existing?.aiContent ?? ''); setEditMyReview(existing?.myReview ?? '');
+    } else {
+      if (activeTab !== 'watched') setFooterBadges(prev => ({ ...prev, watched: prev.watched + 1 }));
     }
     setConfirmMovie(null);
   };
@@ -865,11 +896,24 @@ export default function App() {
     if (!currentViewingMovie) return;
     const existing = getCollectionData(currentViewingMovie.id);
     const isDirectReview = !existing || existing.status === 'none';
+    const isNewToWatched = existing?.status !== 'watched'; // レビュー更新ではなく、新規登録かどうか
+    
     const reviewEntry = {
       movieId: currentViewingMovie.id, movieData: currentViewingMovie, status: 'watched',
       score: Number(editScore.toFixed(1)), aiContent: editAiContent, myReview: editMyReview, updatedAt: Date.now()
     };
     setMyCollection(prev => [...prev.filter(item => item.movieId !== currentViewingMovie.id), reviewEntry]);
+    
+    if (isNewToWatched) {
+      setUnreadItems(prev => {
+        const nwList = new Set(prev.watchlist);
+        nwList.delete(currentViewingMovie.id);
+        const nWatched = new Set(prev.watched);
+        nWatched.add(currentViewingMovie.id);
+        return { watchlist: nwList, watched: nWatched };
+      });
+      if (activeTab !== 'watched') setFooterBadges(prev => ({ ...prev, watched: prev.watched + 1 }));
+    }
     await saveToSupabase(reviewEntry);
 
     if (isDirectReview && currentModalMode === 'review') {
@@ -886,18 +930,50 @@ export default function App() {
     }, 1500);
   };
 
-  const handleTabClick = (targetTab: string) => {
-    if (activeTab === targetTab) {
-      if (targetTab === 'home') resetSearch();
-      setTabStates(prev => ({ ...prev, [targetTab]: { modalMode: null, viewingMovie: null } }));
-      setIsSelectionMode(false);
-    } else { setActiveTab(targetTab); }
-  };
-
-  const handleAppTitleClick = () => {
+const handleAppTitleClick = () => {
+    // 他のタブへ移動する際に、元いたタブの新着バッジをすべて消す
+    if (activeTab === 'watchlist') setUnreadItems(prev => ({ ...prev, watchlist: new Set() }));
+    if (activeTab === 'watched') setUnreadItems(prev => ({ ...prev, watched: new Set() }));
+    
     setActiveTab('home');
     setTabStates(prev => ({ ...prev, home: { modalMode: null, viewingMovie: null } }));
     resetSearch();
+  };
+
+  const handleTabClick = (targetTab: string) => {
+    if (activeTab === targetTab) {
+      // ▼ 同じタブを押した場合の処理（スクロール or リセット）
+      if (targetTab === 'home') {
+        const isBase = !isSearchActive && tabStates.home.modalMode === null;
+        if (isBase) {
+          // ホームのトップにいるなら上へスクロール
+          document.getElementById('scroll-home')?.scrollTo({ top: 0, behavior: 'smooth' });
+        } else {
+          resetSearch();
+          setTabStates(prev => ({ ...prev, home: { modalMode: null, viewingMovie: null } }));
+        }
+      } else {
+        const isBase = tabStates[targetTab]?.modalMode === null && !isSelectionMode;
+        if (isBase) {
+          // リストのトップにいるなら上へスクロール
+          document.getElementById(`scroll-${targetTab}`)?.scrollTo({ top: 0, behavior: 'smooth' });
+        } else {
+          setTabStates(prev => ({ ...prev, [targetTab]: { modalMode: null, viewingMovie: null } }));
+          setIsSelectionMode(false);
+        }
+      }
+    } else {
+      // ▼ 違うタブへ移動する場合の処理
+      // 元いたタブの作品の「新着ドット丸」をすべて消す
+      if (activeTab === 'watchlist') setUnreadItems(prev => ({ ...prev, watchlist: new Set() }));
+      if (activeTab === 'watched') setUnreadItems(prev => ({ ...prev, watched: new Set() }));
+      
+      // 移動先のフッターの「数字バッジ」を消す
+      if (targetTab === 'watchlist') setFooterBadges(prev => ({ ...prev, watchlist: 0 }));
+      if (targetTab === 'watched') setFooterBadges(prev => ({ ...prev, watched: 0 }));
+      
+      setActiveTab(targetTab);
+    }
   };
 
   // --- トップヘッダー（固定用） ---
@@ -1033,12 +1109,11 @@ export default function App() {
     );
   };
 
-  // --- ベースホーム（常に奥で待機） ---
   // --- ベースホーム ---
   const renderBaseHome = () => {
     const recommendedList = homeCategoriesData['おすすめ'] || [];
     return (
-      <div className="flex-1 overflow-y-auto space-y-6 pb-8">
+      <div id="scroll-home" className="flex-1 overflow-y-auto space-y-6 pb-8">
         {isHomeLoading ? (
           <div className="flex flex-col items-center justify-center h-64 gap-3 text-zinc-500"><Loader2 size={32} className="animate-spin text-red-600" /><p className="text-xs font-bold">取得中...</p></div>
         ) : (
@@ -1421,6 +1496,7 @@ export default function App() {
         )}
 
         <div className="flex-1 overflow-y-auto px-4 pt-4 pb-6">
+        <div id={`scroll-${statusFilter}`} className="flex-1 overflow-y-auto px-4 pt-4 pb-6">
           {list.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-[50vh] text-zinc-600">
               {statusFilter === 'watched' ? <CheckCircle2 size={48} className="opacity-20 mb-4" /> : <Bookmark size={48} className="opacity-20 mb-4" />}
@@ -1446,6 +1522,12 @@ export default function App() {
                       className={`relative rounded-md overflow-hidden shadow-md active:scale-95 transition-transform cursor-pointer group ${isSelectionMode && isSelected ? 'ring-2 ring-red-600 opacity-60' : ''}`}
                     >
                       {movie.posterUrl ? <img src={movie.posterUrl} className="w-full aspect-[2/3] object-cover bg-zinc-800 group-hover:brightness-75 transition" /> : <div className="w-full aspect-[2/3] bg-zinc-800 flex items-center justify-center text-center text-[10px] text-zinc-500 p-1">{movie.title}</div>}
+                      
+                      {/* ▼ 新着作品のドット丸 ▼ */}
+                      {unreadItems[statusFilter].has(item.movieId) && (
+                        <div className="absolute top-1.5 left-1.5 w-3 h-3 bg-red-600 rounded-full border border-black shadow-md z-20 animate-pulse" />
+                      )}
+
                       {statusFilter === 'watched' && face && (
                         <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black via-black/80 to-transparent p-1.5 pt-4 flex justify-between items-center z-10 px-2">
                           <face.icon size={16} color={face.color} strokeWidth={1.2} />
@@ -1625,16 +1707,22 @@ export default function App() {
 
         {/* --- 固定フッター --- */}
         <nav className="shrink-0 bg-[#141414]/98 backdrop-blur-xl border-t border-zinc-800 flex justify-around items-center py-2.5 px-3 pb-safe z-[150] relative">
-          <button id="tab-btn-home" onClick={() => handleTabClick('home')} className={`flex flex-col items-center py-1 px-3 transition cursor-pointer ${activeTab === 'home' || activeTab === 'genre_view' ? 'text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>
+          <button id="tab-btn-home" onClick={() => handleTabClick('home')} className={`flex flex-col items-center py-1 px-3 transition cursor-pointer relative ${activeTab === 'home' || activeTab === 'genre_view' ? 'text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>
             <Home size={24} />
             <span className="text-xs mt-1 font-bold">ホーム</span>
           </button>
-          <button id="tab-btn-watchlist" onClick={() => handleTabClick('watchlist')} className={`flex flex-col items-center py-1 px-3 transition cursor-pointer ${activeTab === 'watchlist' ? 'text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>
+          <button id="tab-btn-watchlist" onClick={() => handleTabClick('watchlist')} className={`flex flex-col items-center py-1 px-3 transition cursor-pointer relative ${activeTab === 'watchlist' ? 'text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>
             <Bookmark size={24} />
+            {footerBadges.watchlist > 0 && (
+              <span className="absolute top-0.5 right-2 bg-red-600 text-white text-[9px] font-bold w-4 h-4 flex items-center justify-center rounded-full shadow-md leading-none">{footerBadges.watchlist > 99 ? '99+' : footerBadges.watchlist}</span>
+            )}
             <span className="text-xs mt-1 font-bold">みたい！</span>
           </button>
-          <button id="tab-btn-watched" onClick={() => handleTabClick('watched')} className={`flex flex-col items-center py-1 px-3 transition cursor-pointer ${activeTab === 'watched' ? 'text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>
+          <button id="tab-btn-watched" onClick={() => handleTabClick('watched')} className={`flex flex-col items-center py-1 px-3 transition cursor-pointer relative ${activeTab === 'watched' ? 'text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>
             <CheckCircle2 size={24} />
+            {footerBadges.watched > 0 && (
+              <span className="absolute top-0.5 right-2 bg-red-600 text-white text-[9px] font-bold w-4 h-4 flex items-center justify-center rounded-full shadow-md leading-none">{footerBadges.watched > 99 ? '99+' : footerBadges.watched}</span>
+            )}
             <span className="text-xs mt-1 font-bold">鑑賞済み</span>
           </button>
         </nav>
