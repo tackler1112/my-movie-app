@@ -1704,25 +1704,21 @@ const handleAppTitleClick = () => {
             <span className="text-xs mt-1 font-bold">ホーム</span>
           </button>
 
-          {/* ▼ みたい！リスト ▼ */}
           <button id="tab-btn-watchlist" onClick={() => handleTabClick('watchlist')} className={`flex flex-col items-center py-1 px-3 transition cursor-pointer ${activeTab === 'watchlist' ? 'text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>
             <div className="relative">
               <Bookmark size={24} />
               {footerBadges.watchlist > 0 && (
-                {/* ここで「みたいリスト」の数字位置だけを調整できます（現在は pt-[1px] のみ） */}
                 <span className="absolute -top-1 -right-2 bg-red-600 text-white text-[10px] font-bold w-4 h-4 flex items-center justify-center rounded-full shadow-md pt-[1px]">{footerBadges.watchlist > 99 ? '99+' : footerBadges.watchlist}</span>
               )}
             </div>
             <span className="text-xs mt-1 font-bold">みたい！</span>
           </button>
 
-          {/* ▼ 鑑賞済み ▼ */}
           <button id="tab-btn-watched" onClick={() => handleTabClick('watched')} className={`flex flex-col items-center py-1 px-3 transition cursor-pointer ${activeTab === 'watched' ? 'text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>
             <div className="relative">
               <CheckCircle2 size={24} />
               {footerBadges.watched > 0 && (
-                {/* ここで「鑑賞済み」の数字位置だけを調整できます（pl-[1px] で右に押し出しています） */}
-                <span className="absolute -top-1 -right-2 bg-red-600 text-white text-[10px] font-bold w-4 h-4 flex items-center justify-center rounded-full shadow-md pl-[2px]">{footerBadges.watched > 99 ? '99+' : footerBadges.watched}</span>
+                <span className="absolute -top-1 -right-2 bg-red-600 text-white text-[10px] font-bold w-4 h-4 flex items-center justify-center rounded-full shadow-md pl-[1px]">{footerBadges.watched > 99 ? '99+' : footerBadges.watched}</span>
               )}
             </div>
             <span className="text-xs mt-1 font-bold">鑑賞済み</span>
