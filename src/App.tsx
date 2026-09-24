@@ -1495,7 +1495,6 @@ const handleAppTitleClick = () => {
           </div>
         )}
 
-        <div className="flex-1 overflow-y-auto px-4 pt-4 pb-6">
         <div id={`scroll-${statusFilter}`} className="flex-1 overflow-y-auto px-4 pt-4 pb-6">
           {list.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-[50vh] text-zinc-600">
@@ -1523,8 +1522,7 @@ const handleAppTitleClick = () => {
                     >
                       {movie.posterUrl ? <img src={movie.posterUrl} className="w-full aspect-[2/3] object-cover bg-zinc-800 group-hover:brightness-75 transition" /> : <div className="w-full aspect-[2/3] bg-zinc-800 flex items-center justify-center text-center text-[10px] text-zinc-500 p-1">{movie.title}</div>}
                       
-                      {/* ▼ 新着作品のドット丸 ▼ */}
-                      {unreadItems[statusFilter].has(item.movieId) && (
+                      {unreadItems[statusFilter]?.has(item.movieId) && (
                         <div className="absolute top-1.5 left-1.5 w-3 h-3 bg-red-600 rounded-full border border-black shadow-md z-20 animate-pulse" />
                       )}
 
@@ -1609,7 +1607,6 @@ const handleAppTitleClick = () => {
 
         {flyingPoster && (() => {
           const { start, target } = flyingPoster;
-          // スタート地点とゴール地点の中心座標から、移動する距離(X, Y)を計算
           const startCenterX = start.left + start.width / 2;
           const startCenterY = start.top + start.height / 2;
           const targetCenterX = target.left + target.width / 2;
@@ -1619,7 +1616,6 @@ const handleAppTitleClick = () => {
 
           return (
             <>
-              {/* GPUのみで動く専用アニメーションを動的生成 */}
               <style>{`
                 @keyframes gpuFlyToTab {
                   0% { transform: translate3d(0, 0, 0) scale(1); opacity: 1; border-radius: 8px; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5); }
@@ -1638,7 +1634,7 @@ const handleAppTitleClick = () => {
                   backgroundSize: 'cover',
                   backgroundPosition: 'center',
                   transformOrigin: 'center center',
-                  willChange: 'transform, opacity', // ブラウザにGPUレイヤーであることを教える
+                  willChange: 'transform, opacity',
                   animation: 'gpuFlyToTab 0.9s cubic-bezier(0.25, 1, 0.5, 1) forwards'
                 }} 
               />
@@ -1660,18 +1656,15 @@ const handleAppTitleClick = () => {
           </div>
         )}
 
-        {/* --- スライドするメインコンテンツ群 --- */}
+        {/* --- メインコンテンツ群 --- */}
         <div className="flex-1 relative overflow-hidden flex flex-col min-h-0 bg-[#141414]">
           
-          {/* ホーム画面のときは常に「1つの検索ヘッダー」を上に固定表示する */}
           {activeTab === 'home' && renderSearchHeader()}
 
-          {/* ベースのホーム（検索していない時に表示。min-h-0を追加してスクロールを有効化） */}
           <div style={{ display: (activeTab === 'home' && !isSearchActive) ? 'flex' : 'none' }} className="flex-1 flex-col relative z-0 bg-[#141414] min-h-0">
             {renderBaseHome()}
           </div>
 
-          {/* 検索結果（検索中のみ表示。フリックで戻る処理を実行。min-h-0を追加） */}
           {activeTab === 'home' && isSearchActive && (
             <div className="flex-1 flex flex-col relative z-10 bg-[#141414] animate-in fade-in min-h-0"
                  onTouchStart={handleTouchStart} onTouchEnd={(e) => handleTouchEnd(e, 'search')}>
@@ -1679,17 +1672,14 @@ const handleAppTitleClick = () => {
             </div>
           )}
 
-          {/* レイヤー2: Genre View（全て見る画面。フリックで戻る処理を実行） */}
           <div style={{ display: activeTab === 'genre_view' ? 'flex' : 'none' }} className="w-full h-full flex-col absolute inset-0 z-20 bg-[#141414] animate-in fade-in duration-200"
                onTouchStart={handleTouchStart} onTouchEnd={(e) => handleTouchEnd(e, 'genre')}>
             {renderGenreView()}
           </div>
 
-          {/* レイヤー3: MyList */}
           <div style={{ display: activeTab === 'watchlist' ? 'flex' : 'none' }} className="w-full h-full flex-col absolute inset-0 z-0 bg-[#141414]">{renderMyList('watchlist')}</div>
           <div style={{ display: activeTab === 'watched' ? 'flex' : 'none' }} className="w-full h-full flex-col absolute inset-0 z-0 bg-[#141414]">{renderMyList('watched')}</div>
           
-          {/* レイヤー4: Detail Modal */}
           {(currentModalMode === 'detail') && (
             <div className={`w-full h-full flex flex-col absolute inset-0 z-[60] bg-[#141414] ${swipeOutTarget === 'detail' ? 'slide-out-right' : 'animate-in slide-in-from-bottom-10 fade-in duration-300'}`}
                  onTouchStart={handleTouchStart} onTouchEnd={(e) => handleTouchEnd(e, 'detail')}>
@@ -1697,7 +1687,6 @@ const handleAppTitleClick = () => {
             </div>
           )}
 
-          {/* レイヤー5: Review Modal */}
           {currentModalMode === 'review' && (
             <div className="w-full h-full flex flex-col absolute inset-0 z-[70] bg-[#141414] animate-in slide-in-from-bottom-10 fade-in duration-300">
               {renderReviewModal()}
