@@ -793,15 +793,29 @@ export default function App() {
 
   const triggerFlyAnimation = (targetTab: 'watchlist' | 'watched', movieUrl: string, onStart: () => void) => {
     const targetEl = document.getElementById(`tab-btn-${targetTab}`);
-    const startRect = detailPosterRef.current?.getBoundingClientRect();
-    if (startRect && targetEl) {
+    
+    if (targetEl) {
       const targetRect = targetEl.getBoundingClientRect();
-      setFlyingPoster({ url: movieUrl, start: startRect, target: targetRect });
       
-      // アニメーションが完全に描画開始されてから、裏で重い処理（モーダル閉じ等）を実行
+      // 画面中央に大きめのポスター（幅140px, 高さ210px）を強制的に出現させる
+      const startWidth = 140;
+      const startHeight = 210;
+      const startLeft = (window.innerWidth - startWidth) / 2;
+      const startTop = (window.innerHeight - startHeight) / 2 - 30; // 画面中央より少し上
+      
+      const startRect = {
+        top: startTop,
+        left: startLeft,
+        width: startWidth,
+        height: startHeight,
+      };
+
+      setFlyingPoster({ url: movieUrl, start: startRect as DOMRect, target: targetRect });
+      
+      // ラグを防ぐため、裏の重い処理を少し遅らせる
       setTimeout(() => {
         onStart();
-      }, 100); 
+      }, 50);
       
       setTimeout(() => { setFlyingPoster(null); }, 900);
     } else { 
@@ -1511,40 +1525,17 @@ export default function App() {
           )}
         </div>
 
-        {flyingPoster && (() => {
-          const { start, target } = flyingPoster;
-          // 要素の中心座標を計算
-          const startX = start.left + start.width / 2;
-          const startY = start.top + start.height / 2;
-          const targetX = target.left + target.width / 2;
-          const targetY = target.top + target.height / 2;
-          
-          return (
-            <>
-              {/* GPU処理（transform）のみで動かす専用アニメーションを動的生成 */}
-              <style>{`
-                @keyframes gpuFlyToTab {
-                  0% { transform: translate3d(${startX}px, ${startY}px, 0) scale(1); opacity: 1; border-radius: 8px; }
-                  30% { transform: translate3d(${startX}px, ${startY}px, 0) scale(1.05); opacity: 1; }
-                  100% { transform: translate3d(${targetX}px, ${targetY}px, 0) scale(0.15); opacity: 0.1; border-radius: 50%; }
-                }
-              `}</style>
-              <div 
-                className="fixed z-[300] pointer-events-none overflow-hidden shadow-2xl"
-                style={{
-                  top: 0, left: 0,
-                  width: start.width, height: start.height,
-                  marginLeft: -start.width / 2, marginTop: -start.height / 2, // 画面左上を起点に中心を合わせる
-                  backgroundImage: `url(${flyingPoster.url})`,
-                  backgroundSize: 'cover',
-                  backgroundPosition: 'center',
-                  willChange: 'transform, opacity', // ブラウザにGPUレイヤーを強制作成させる
-                  animation: 'gpuFlyToTab 0.9s cubic-bezier(0.25, 1, 0.5, 1) forwards'
-                }} 
-              />
-            </>
-          );
-        })()}
+        {flyingPoster && (
+          <div 
+            className="fixed z-[300] pointer-events-none overflow-hidden shadow-2xl"
+            style={{
+              backgroundImage: `url(${flyingPoster.url})`,
+              backgroundSize: 'cover',
+              backgroundPosition: 'center',
+              animation: 'flyToTab 0.9s cubic-bezier(0.25, 1, 0.5, 1) forwards'
+            }} 
+          />
+        )}
 
         {showReviewConfirm && confirmMovie && (
           <div className="absolute inset-0 bg-black/80 backdrop-blur-md z-[110] flex items-center justify-center p-6 animate-in zoom-in">
@@ -1652,6 +1643,31 @@ export default function App() {
         @keyframes slideOutRight {
           from { transform: translateX(0); }
           to { transform: translateX(100%); }
+        }
+        @keyframes flyToTab {
+          0% {
+            top: ${flyingPoster?.start.top || 0}px;
+            left: ${flyingPoster?.start.left || 0}px;
+            width: ${flyingPoster?.start.width || 0}px;
+            height: ${flyingPoster?.start.height || 0}px;
+            opacity: 1;
+            transform: scale(1);
+            border-radius: 8px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+          }
+          30% {
+            transform: scale(1.05);
+            opacity: 1;
+          }
+          100% {
+            top: ${flyingPoster?.target.top || 0}px;
+            left: ${flyingPoster?.target.left || 0}px;
+            width: ${flyingPoster?.target.width || 0}px;
+            height: ${flyingPoster?.target.height || 0}px;
+            opacity: 0.1;
+            transform: scale(0.2);
+            border-radius: 50%;
+          }
         }
         .slide-out-right {
           animation: slideOutRight 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
