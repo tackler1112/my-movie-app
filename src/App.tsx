@@ -1523,7 +1523,7 @@ const handleAppTitleClick = () => {
                       {movie.posterUrl ? <img src={movie.posterUrl} className="w-full aspect-[2/3] object-cover bg-zinc-800 group-hover:brightness-75 transition" /> : <div className="w-full aspect-[2/3] bg-zinc-800 flex items-center justify-center text-center text-[10px] text-zinc-500 p-1">{movie.title}</div>}
                       
                       {unreadItems[statusFilter]?.has(item.movieId) && (
-                        <div className="absolute top-1.5 left-1.5 w-2 h-2 bg-red-600 rounded-full shadow-md z-20 animate-pulse" />
+                        <div className="absolute top-1.5 left-1.5 w-2.5 h-2.5 bg-red-600 rounded-full shadow-md z-20 animate-pulse" />
                       )}
 
                       {statusFilter === 'watched' && face && (
