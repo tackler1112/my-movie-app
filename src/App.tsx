@@ -1708,7 +1708,7 @@ const handleAppTitleClick = () => {
             <div className="relative">
               <Bookmark size={24} />
               {footerBadges.watchlist > 0 && (
-                <span className="absolute -top-1 -right-2 bg-red-600 text-white text-[10px] font-bold w-4 h-4 flex items-center justify-center rounded-full shadow-md pt-[1px]">{footerBadges.watchlist > 99 ? '99+' : footerBadges.watchlist}</span>
+                <span className="absolute -top-1 -right-2 bg-red-600 text-white text-[10px] font-bold w-4 h-4 flex items-center justify-center rounded-full shadow-md pt-[0.5px] pl-[0.5px]">{footerBadges.watchlist > 99 ? '99+' : footerBadges.watchlist}</span>
               )}
             </div>
             <span className="text-xs mt-1 font-bold">みたい！</span>
@@ -1718,7 +1718,7 @@ const handleAppTitleClick = () => {
             <div className="relative">
               <CheckCircle2 size={24} />
               {footerBadges.watched > 0 && (
-                <span className="absolute -top-1 -right-2 bg-red-600 text-white text-[10px] font-bold w-4 h-4 flex items-center justify-center rounded-full shadow-md pl-[1px]">{footerBadges.watched > 99 ? '99+' : footerBadges.watched}</span>
+                <span className="absolute -top-1 -right-2 bg-red-600 text-white text-[10px] font-bold w-4 h-4 flex items-center justify-center rounded-full shadow-md pt-[0.5px] pl-[0.5px]">{footerBadges.watched > 99 ? '99+' : footerBadges.watched}</span>
               )}
             </div>
             <span className="text-xs mt-1 font-bold">鑑賞済み</span>
