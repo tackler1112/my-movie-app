@@ -1722,7 +1722,7 @@ const handleAppTitleClick = () => {
               <CheckCircle2 size={24} />
               {footerBadges.watched > 0 && (
                 {/* ここで「鑑賞済み」の数字位置だけを調整できます（pl-[1px] で右に押し出しています） */}
-                <span className="absolute -top-1 -right-2 bg-red-600 text-white text-[10px] font-bold w-4 h-4 flex items-center justify-center rounded-full shadow-md pt-[0px] pl-[2px]">{footerBadges.watched > 99 ? '99+' : footerBadges.watched}</span>
+                <span className="absolute -top-1 -right-2 bg-red-600 text-white text-[10px] font-bold w-4 h-4 flex items-center justify-center rounded-full shadow-md pl-[2px]">{footerBadges.watched > 99 ? '99+' : footerBadges.watched}</span>
               )}
             </div>
             <span className="text-xs mt-1 font-bold">鑑賞済み</span>
