@@ -797,8 +797,16 @@ export default function App() {
     if (startRect && targetEl) {
       const targetRect = targetEl.getBoundingClientRect();
       setFlyingPoster({ url: movieUrl, start: startRect, target: targetRect });
-      onStart(); setTimeout(() => { setFlyingPoster(null); }, 900);
-    } else { onStart(); }
+      
+      // アニメーションがスムーズに開始されるよう、裏の重い処理（画面閉じなど）をほんの少し遅らせてラグを防ぐ
+      setTimeout(() => {
+        onStart();
+      }, 50);
+      
+      setTimeout(() => { setFlyingPoster(null); }, 900);
+    } else { 
+      onStart(); 
+    }
   };
 
   const handleAddWatchlist = async (movie: any) => {
@@ -1523,20 +1531,19 @@ export default function App() {
         )}
 
         {/* --- スライドするメインコンテンツ群 --- */}
-        {/* --- スライドするメインコンテンツ群 --- */}
         <div className="flex-1 relative overflow-hidden flex flex-col min-h-0 bg-[#141414]">
           
           {/* ホーム画面のときは常に「1つの検索ヘッダー」を上に固定表示する */}
           {activeTab === 'home' && renderSearchHeader()}
 
-          {/* ベースのホーム（検索していない時に表示） */}
-          <div style={{ display: (activeTab === 'home' && !isSearchActive) ? 'flex' : 'none' }} className="flex-1 flex-col relative z-0 bg-[#141414]">
+          {/* ベースのホーム（検索していない時に表示。min-h-0を追加してスクロールを有効化） */}
+          <div style={{ display: (activeTab === 'home' && !isSearchActive) ? 'flex' : 'none' }} className="flex-1 flex-col relative z-0 bg-[#141414] min-h-0">
             {renderBaseHome()}
           </div>
 
-          {/* 検索結果（検索中のみ表示。フリックで戻る処理を実行） */}
+          {/* 検索結果（検索中のみ表示。フリックで戻る処理を実行。min-h-0を追加） */}
           {activeTab === 'home' && isSearchActive && (
-            <div className="flex-1 flex flex-col relative z-10 bg-[#141414] animate-in fade-in"
+            <div className="flex-1 flex flex-col relative z-10 bg-[#141414] animate-in fade-in min-h-0"
                  onTouchStart={handleTouchStart} onTouchEnd={(e) => handleTouchEnd(e, 'search')}>
               {renderSearchLayer()}
             </div>
