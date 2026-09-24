@@ -892,18 +892,9 @@ export default function App() {
   );
 
   // --- 検索用の共通ヘッダー（手前・奥の切り替え） ---
-  const renderSearchHeader = (isBase: boolean) => {
-    const displaySearchTitle = (isBase && (isSearchActive || swipeOutTarget === 'search')) ? '' : searchTitle;
-    const displaySelectedTags = (isBase && (isSearchActive || swipeOutTarget === 'search')) ? [] : selectedTags;
-    const displaySearchPerson = (isBase && (isSearchActive || swipeOutTarget === 'search')) ? null : searchPerson;
-    const displaySearchCollection = (isBase && (isSearchActive || swipeOutTarget === 'search')) ? null : searchCollection;
-    const displayIsFilterApplied = (isBase && (isSearchActive || swipeOutTarget === 'search')) ? false : isFilterApplied;
-    
-    const unselectedGenresFiltered = apiGenres.filter(g => !displaySelectedTags.includes(g.id.toString()));
-    const selectedGenreObjsFiltered = apiGenres.filter(g => displaySelectedTags.includes(g.id.toString()));
-
+  // --- 検索用の共通ヘッダー（1つに統合） ---
+  const renderSearchHeader = () => {
     const handleFilterToggle = () => {
-      if (isBase && (isSearchActive || swipeOutTarget === 'search')) return;
       if (!showFilters) { setTempFilters(appliedFilters); setShowFilters(true); } 
       else { setShowFilters(false); }
     };
@@ -916,57 +907,56 @@ export default function App() {
               <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400" size={16} />
               <input 
                 type="text" 
-                value={displaySearchTitle} 
+                value={searchTitle} 
                 onChange={(e) => { 
-                  if (isBase && (isSearchActive || swipeOutTarget === 'search')) return;
                   setSearchTitle(e.target.value); 
                   setApiPage(1); setNextApiPage(1); setForceSearch(false); setSearchPerson(null); setSearchCollection(null); 
                 }} 
                 placeholder="映画を検索..." 
                 className="w-full bg-zinc-900 border border-zinc-800 rounded-lg py-2.5 pl-10 pr-8 text-white font-medium focus:outline-none focus:border-zinc-500 focus:ring-1 focus:ring-zinc-500 transition-all placeholder:text-zinc-500 ios-safe-input" 
               />
-              {displaySearchTitle && (
+              {searchTitle && (
                 <button onClick={() => { setSearchTitle(''); setApiPage(1); setNextApiPage(1); setForceSearch(false); }} className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 cursor-pointer"><X size={16} /></button>
               )}
             </div>
-            <button onClick={handleFilterToggle} className={`filter-toggle-btn w-[42px] h-[42px] rounded-full border flex items-center justify-center transition shrink-0 cursor-pointer ${displayIsFilterApplied ? 'bg-red-600 border-red-500 text-white' : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white'}`}>
+            <button onClick={handleFilterToggle} className={`filter-toggle-btn w-[42px] h-[42px] rounded-full border flex items-center justify-center transition shrink-0 cursor-pointer ${isFilterApplied ? 'bg-red-600 border-red-500 text-white' : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white'}`}>
               <SlidersHorizontal size={16} />
             </button>
           </div>
           
-          {displaySearchPerson && (
+          {searchPerson && (
             <div className="flex items-center gap-2 pt-0.5 px-1">
               <span className="text-zinc-200 text-[11px] font-bold bg-zinc-800 px-3 py-1 rounded-full border border-zinc-700 flex items-center gap-1 shadow-md">
-                {displaySearchPerson.type === 'director' ? '監督' : 'キャスト'}: {displaySearchPerson.name}
+                {searchPerson.type === 'director' ? '監督' : 'キャスト'}: {searchPerson.name}
                 <button onClick={clearPersonSearch} className="ml-1 text-zinc-400 hover:text-white cursor-pointer"><X size={14} /></button>
               </span>
             </div>
           )}
 
-          {displaySearchCollection && (
+          {searchCollection && (
             <div className="flex items-center gap-2 pt-0.5 px-1">
               <span className="text-zinc-200 text-[11px] font-bold bg-zinc-800 px-3 py-1 rounded-full border border-zinc-700 flex items-center gap-1 shadow-md">
-                シリーズ: {displaySearchCollection.name}
+                シリーズ: {searchCollection.name}
                 <button onClick={clearCollectionSearch} className="ml-1 text-zinc-400 hover:text-white cursor-pointer"><X size={14} /></button>
               </span>
             </div>
           )}
 
-          {selectedGenreObjsFiltered.length > 0 && (
+          {selectedTags.length > 0 && (
             <div className="flex flex-wrap gap-1.5 pt-1">
-              {selectedGenreObjsFiltered.map(g => (
+              {apiGenres.filter(g => selectedTags.includes(g.id.toString())).map(g => (
                 <button key={g.id} onClick={() => toggleTagSelection(g.id.toString())} className="px-2.5 py-1 rounded-full text-[11px] font-bold whitespace-nowrap transition cursor-pointer bg-red-600 text-white border border-red-500 shadow-md flex items-center gap-1">{g.name} <X size={12} /></button>
               ))}
             </div>
           )}
 
           <div className="flex overflow-x-auto gap-1.5 py-1 [&::-webkit-scrollbar]:hidden">
-            {unselectedGenresFiltered.map((g) => (
-              <button key={g.id} onClick={() => { if(isBase && (isSearchActive || swipeOutTarget === 'search')) return; toggleTagSelection(g.id.toString()); }} className="px-3 py-1 rounded-full text-[11px] font-bold whitespace-nowrap transition cursor-pointer border bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-white">{g.name}</button>
+            {apiGenres.filter(g => !selectedTags.includes(g.id.toString())).map((g) => (
+              <button key={g.id} onClick={() => toggleTagSelection(g.id.toString())} className="px-3 py-1 rounded-full text-[11px] font-bold whitespace-nowrap transition cursor-pointer border bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-white">{g.name}</button>
             ))}
           </div>
 
-          {!isBase && (isSearchActive || swipeOutTarget === 'search') && (
+          {isSearchActive && (
             <div className="flex items-center justify-between pt-1 border-t border-zinc-800/60 mt-1">
               <div className="flex items-center gap-2">
                 <button onClick={resetSearch} className="p-1.5 bg-zinc-900 border border-zinc-800 rounded-md text-zinc-300 hover:text-white transition cursor-pointer flex items-center gap-1 text-xs font-bold" title="検索条件をクリア">
@@ -985,8 +975,7 @@ export default function App() {
             </div>
           )}
 
-          {/* フィルターメニューは常にDOM上に1つだけ描画してクリック干渉を防ぐ */}
-          {showFilters && (!isBase || (!isSearchActive && swipeOutTarget !== 'search')) && (
+          {showFilters && (
             <div ref={filterMenuRef} className="absolute top-full right-0 left-0 mt-2 bg-zinc-900 p-4 rounded-xl border border-zinc-700 shadow-2xl z-50 animate-in fade-in">
                <div className="flex items-center justify-between mb-4 border-b border-zinc-800 pb-2">
                   <h4 className="text-sm font-bold text-white">フィルター設定</h4>
@@ -1023,109 +1012,105 @@ export default function App() {
   };
 
   // --- ベースホーム（常に奥で待機） ---
+  // --- ベースホーム ---
   const renderBaseHome = () => {
     const recommendedList = homeCategoriesData['おすすめ'] || [];
     return (
-      <>
-        {renderSearchHeader(true)}
-        <div className="flex-1 overflow-y-auto space-y-6 pb-8">
-          {isHomeLoading ? (
-            <div className="flex flex-col items-center justify-center h-64 gap-3 text-zinc-500"><Loader2 size={32} className="animate-spin text-red-600" /><p className="text-xs font-bold">取得中...</p></div>
-          ) : (
-            <>
-              {recommendedList.length > 0 && (
-                <div className="px-4 pt-3">
-                  <h3 className="text-zinc-100 font-bold text-sm mb-2">おすすめ作品</h3>
-                  <div className="relative w-full aspect-[16/9] rounded-xl overflow-hidden shadow-2xl cursor-pointer bg-zinc-900 flex"
-                    onClick={() => openDetailModal(recommendedList[heroIndex], 'home')}
-                    onTouchStart={e => heroTouchStartX.current = e.touches[0].clientX}
-                    onTouchEnd={e => {
-                      const diff = e.changedTouches[0].clientX - heroTouchStartX.current;
-                      const topLength = Math.min(recommendedList.length, 10);
-                      if (diff > 50) setHeroIndex(prev => (prev - 1 + topLength) % topLength);
-                      if (diff < -50) setHeroIndex(prev => (prev + 1) % topLength);
-                    }}
-                  >
-                    <div className="flex w-full h-full transition-transform duration-500 ease-out" style={{ transform: `translateX(-${heroIndex * 100}%)` }}>
-                      {recommendedList.slice(0, 10).map((movie) => (
-                        <div key={movie.id} className="w-full h-full flex-shrink-0 relative">
-                          <img src={movie.backdropUrl || movie.posterUrl} className="w-full h-full object-cover" />
-                          <div className="absolute inset-0 bg-gradient-to-t from-[#0a0a0a] via-[#0a0a0a]/20 to-transparent p-4 flex flex-col justify-end">
-                            <h4 className="text-white font-extrabold text-base line-clamp-1 drop-shadow-md">{movie.title}</h4>
-                            <p className="text-zinc-300 text-[11px] line-clamp-1 mt-0.5">{movie.apiSynopsis}</p>
-                          </div>
+      <div className="flex-1 overflow-y-auto space-y-6 pb-8">
+        {isHomeLoading ? (
+          <div className="flex flex-col items-center justify-center h-64 gap-3 text-zinc-500"><Loader2 size={32} className="animate-spin text-red-600" /><p className="text-xs font-bold">取得中...</p></div>
+        ) : (
+          <>
+            {recommendedList.length > 0 && (
+              <div className="px-4 pt-3">
+                <h3 className="text-zinc-100 font-bold text-sm mb-2">おすすめ作品</h3>
+                <div className="relative w-full aspect-[16/9] rounded-xl overflow-hidden shadow-2xl cursor-pointer bg-zinc-900 flex"
+                  onClick={() => openDetailModal(recommendedList[heroIndex], 'home')}
+                  onTouchStart={e => heroTouchStartX.current = e.touches[0].clientX}
+                  onTouchEnd={e => {
+                    const diff = e.changedTouches[0].clientX - heroTouchStartX.current;
+                    const topLength = Math.min(recommendedList.length, 10);
+                    if (diff > 50) setHeroIndex(prev => (prev - 1 + topLength) % topLength);
+                    if (diff < -50) setHeroIndex(prev => (prev + 1) % topLength);
+                  }}
+                >
+                  <div className="flex w-full h-full transition-transform duration-500 ease-out" style={{ transform: `translateX(-${heroIndex * 100}%)` }}>
+                    {recommendedList.slice(0, 10).map((movie) => (
+                      <div key={movie.id} className="w-full h-full flex-shrink-0 relative">
+                        <img src={movie.backdropUrl || movie.posterUrl} className="w-full h-full object-cover" />
+                        <div className="absolute inset-0 bg-gradient-to-t from-[#0a0a0a] via-[#0a0a0a]/20 to-transparent p-4 flex flex-col justify-end">
+                          <h4 className="text-white font-extrabold text-base line-clamp-1 drop-shadow-md">{movie.title}</h4>
+                          <p className="text-zinc-300 text-[11px] line-clamp-1 mt-0.5">{movie.apiSynopsis}</p>
                         </div>
-                      ))}
-                    </div>
-                    <div className="absolute top-2 right-3 flex gap-1.5 z-10 flex-wrap justify-end max-w-[50%]">
-                      {recommendedList.slice(0, 10).map((_, idx) => (
-                        <span key={idx} className={`h-0.5 rounded-full transition-all ${idx === heroIndex ? 'bg-white/80 w-3' : 'bg-white/30 w-1.5'}`} />
-                      ))}
-                    </div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="absolute top-2 right-3 flex gap-1.5 z-10 flex-wrap justify-end max-w-[50%]">
+                    {recommendedList.slice(0, 10).map((_, idx) => (
+                      <span key={idx} className={`h-0.5 rounded-full transition-all ${idx === heroIndex ? 'bg-white/80 w-3' : 'bg-white/30 w-1.5'}`} />
+                    ))}
                   </div>
                 </div>
-              )}
-              {CATEGORIES.map(category => {
-                if (category === 'おすすめ') return null;
-                const allMovies = homeCategoriesData[category] || [];
-                if (allMovies.length === 0) return null;
-                const isNowPlaying = category === '公開中';
-                return (
-                  <div key={category} className="space-y-2.5">
-                    <div className="flex justify-between items-end px-4">
-                      <h3 className={`font-bold ${isNowPlaying ? 'text-red-500 text-base tracking-wide' : 'text-zinc-100 text-sm'}`}>{category}</h3>
-                      <button onClick={() => handleOpenGenreList(category)} className="text-[11px] font-bold text-zinc-400 hover:text-white flex items-center gap-0.5 cursor-pointer">すべて見る <ChevronRight size={12} /></button>
-                    </div>
-                    <div className="flex overflow-x-auto snap-x px-4 gap-2.5 pb-2 pt-1 [&::-webkit-scrollbar]:hidden">
-                      {allMovies.slice(0, 10).map((movie: any) => {
-                        const status = getCollectionData(movie.id)?.status;
-                        return (
-                          <div key={movie.id} onClick={() => openDetailModal(movie, 'home')} className={`flex-none snap-start relative rounded-md overflow-hidden active:scale-95 transition-transform cursor-pointer group shadow-lg ${isNowPlaying ? 'w-[125px]' : 'w-[100px]'}`}>
-                            {movie.posterUrl ? <img src={movie.posterUrl} className="w-full aspect-[2/3] object-cover bg-zinc-800 group-hover:brightness-75 transition" /> : <div className="w-full aspect-[2/3] bg-zinc-800 flex items-center justify-center p-1 text-center text-[10px] text-zinc-500">{movie.title}</div>}
-                            {status && <div className="absolute top-1 right-1 bg-black/70 rounded-full p-1 backdrop-blur-md border border-white/10 z-10">{status === 'watched' ? <CheckCircle2 size={12} className="text-green-500" /> : <Bookmark size={12} className="text-white" />}</div>}
-                            {isNowPlaying && <div className="absolute top-1 left-1 bg-red-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded shadow-sm">上映中</div>}
-                          </div>
-                        );
-                      })}
-                    </div>
+              </div>
+            )}
+            {CATEGORIES.map(category => {
+              if (category === 'おすすめ') return null;
+              const allMovies = homeCategoriesData[category] || [];
+              if (allMovies.length === 0) return null;
+              const isNowPlaying = category === '公開中';
+              return (
+                <div key={category} className="space-y-2.5">
+                  <div className="flex justify-between items-end px-4">
+                    <h3 className={`font-bold ${isNowPlaying ? 'text-red-500 text-base tracking-wide' : 'text-zinc-100 text-sm'}`}>{category}</h3>
+                    <button onClick={() => handleOpenGenreList(category)} className="text-[11px] font-bold text-zinc-400 hover:text-white flex items-center gap-0.5 cursor-pointer">すべて見る <ChevronRight size={12} /></button>
                   </div>
-                );
-              })}
-            </>
-          )}
-        </div>
-      </>
+                  <div className="flex overflow-x-auto snap-x px-4 gap-2.5 pb-2 pt-1 [&::-webkit-scrollbar]:hidden">
+                    {allMovies.slice(0, 10).map((movie: any) => {
+                      const status = getCollectionData(movie.id)?.status;
+                      return (
+                        <div key={movie.id} onClick={() => openDetailModal(movie, 'home')} className={`flex-none snap-start relative rounded-md overflow-hidden active:scale-95 transition-transform cursor-pointer group shadow-lg ${isNowPlaying ? 'w-[125px]' : 'w-[100px]'}`}>
+                          {movie.posterUrl ? <img src={movie.posterUrl} className="w-full aspect-[2/3] object-cover bg-zinc-800 group-hover:brightness-75 transition" /> : <div className="w-full aspect-[2/3] bg-zinc-800 flex items-center justify-center p-1 text-center text-[10px] text-zinc-500">{movie.title}</div>}
+                          {status && <div className="absolute top-1 right-1 bg-black/70 rounded-full p-1 backdrop-blur-md border border-white/10 z-10">{status === 'watched' ? <CheckCircle2 size={12} className="text-green-500" /> : <Bookmark size={12} className="text-white" />}</div>}
+                          {isNowPlaying && <div className="absolute top-1 left-1 bg-red-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded shadow-sm">上映中</div>}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </>
+        )}
+      </div>
     );
   };
 
   // --- 検索レイヤー（検索時のみ手前に被さり、スライド対象になる） ---
+  // --- 検索結果レイヤー ---
   const renderSearchLayer = () => {
     const visibleSearchResults = displayList;
     return (
-      <>
-        {renderSearchHeader(false)}
-        <div className="flex-1 overflow-y-auto pb-6 px-4 pt-4">
-          {visibleSearchResults.length > 0 ? (
-            <>
-              <div className="grid grid-cols-3 gap-2">
-                {visibleSearchResults.map((movie: any) => (
-                  <div key={movie.id} onClick={() => openDetailModal(movie, 'home')} className="cursor-pointer active:scale-95 transition-transform group relative">
-                    {movie.posterUrl ? <img src={movie.posterUrl} className="w-full aspect-[2/3] object-cover rounded-md shadow-md bg-zinc-800 group-hover:brightness-75 transition" /> : <div className="w-full aspect-[2/3] bg-zinc-800 rounded-md shadow-md flex items-center justify-center p-2 text-[10px] text-zinc-500">{movie.title}</div>}
-                    {getCollectionData(movie.id)?.status && <div className="absolute top-1 right-1 bg-black/70 rounded-full p-1 backdrop-blur-md border border-white/10 z-10">{getCollectionData(movie.id)?.status === 'watched' ? <CheckCircle2 size={12} className="text-green-500" /> : <Bookmark size={12} className="text-white" />}</div>}
-                  </div>
-                ))}
-              </div>
-              {nextApiPage <= totalApiPages && (
-                <div className="py-6 flex justify-center">
-                  <button onClick={() => { if(!isSearching){ setApiPage(nextApiPage); } }} disabled={isSearching} className="px-6 py-2 bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-bold rounded-full transition disabled:opacity-50 flex items-center gap-2 cursor-pointer shadow-lg">
-                    {isSearching ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />} さらに読み込む
-                  </button>
+      <div className="flex-1 overflow-y-auto pb-6 px-4 pt-4">
+        {visibleSearchResults.length > 0 ? (
+          <>
+            <div className="grid grid-cols-3 gap-2">
+              {visibleSearchResults.map((movie: any) => (
+                <div key={movie.id} onClick={() => openDetailModal(movie, 'home')} className="cursor-pointer active:scale-95 transition-transform group relative">
+                  {movie.posterUrl ? <img src={movie.posterUrl} className="w-full aspect-[2/3] object-cover rounded-md shadow-md bg-zinc-800 group-hover:brightness-75 transition" /> : <div className="w-full aspect-[2/3] bg-zinc-800 rounded-md shadow-md flex items-center justify-center p-2 text-[10px] text-zinc-500">{movie.title}</div>}
+                  {getCollectionData(movie.id)?.status && <div className="absolute top-1 right-1 bg-black/70 rounded-full p-1 backdrop-blur-md border border-white/10 z-10">{getCollectionData(movie.id)?.status === 'watched' ? <CheckCircle2 size={12} className="text-green-500" /> : <Bookmark size={12} className="text-white" />}</div>}
                 </div>
-              )}
-            </>
-          ) : (!isSearching && <p className="text-zinc-500 text-xs text-center mt-10">作品が見つかりません</p>)}
-        </div>
-      </>
+              ))}
+            </div>
+            {nextApiPage <= totalApiPages && (
+              <div className="py-6 flex justify-center">
+                <button onClick={() => { if(!isSearching){ setApiPage(nextApiPage); } }} disabled={isSearching} className="px-6 py-2 bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-bold rounded-full transition disabled:opacity-50 flex items-center gap-2 cursor-pointer shadow-lg">
+                  {isSearching ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />} さらに読み込む
+                </button>
+              </div>
+            )}
+          </>
+        ) : (!isSearching && <p className="text-zinc-500 text-xs text-center mt-10">作品が見つかりません</p>)}
+      </div>
     );
   };
 
@@ -1538,22 +1523,26 @@ export default function App() {
         )}
 
         {/* --- スライドするメインコンテンツ群 --- */}
+        {/* --- スライドするメインコンテンツ群 --- */}
         <div className="flex-1 relative overflow-hidden flex flex-col min-h-0 bg-[#141414]">
           
-          {/* レイヤー0: Base Home（常に一番奥で待機） */}
-          <div style={{ display: (activeTab === 'home' || activeTab === 'genre_view') ? 'flex' : 'none' }} className="w-full h-full flex-col absolute inset-0 z-0 bg-[#141414]">
+          {/* ホーム画面のときは常に「1つの検索ヘッダー」を上に固定表示する */}
+          {activeTab === 'home' && renderSearchHeader()}
+
+          {/* ベースのホーム（検索していない時に表示） */}
+          <div style={{ display: (activeTab === 'home' && !isSearchActive) ? 'flex' : 'none' }} className="flex-1 flex-col relative z-0 bg-[#141414]">
             {renderBaseHome()}
           </div>
 
-          {/* レイヤー1: Search Result（スライドアニメーション削除） */}
-          {isSearchActive && (
-            <div className="w-full h-full flex flex-col absolute inset-0 z-10 bg-[#141414] animate-in fade-in"
+          {/* 検索結果（検索中のみ表示。フリックで戻る処理を実行） */}
+          {activeTab === 'home' && isSearchActive && (
+            <div className="flex-1 flex flex-col relative z-10 bg-[#141414] animate-in fade-in"
                  onTouchStart={handleTouchStart} onTouchEnd={(e) => handleTouchEnd(e, 'search')}>
               {renderSearchLayer()}
             </div>
           )}
 
-          {/* レイヤー2: Genre View（スライドアニメーション削除） */}
+          {/* レイヤー2: Genre View（全て見る画面。フリックで戻る処理を実行） */}
           <div style={{ display: activeTab === 'genre_view' ? 'flex' : 'none' }} className="w-full h-full flex-col absolute inset-0 z-20 bg-[#141414] animate-in fade-in duration-200"
                onTouchStart={handleTouchStart} onTouchEnd={(e) => handleTouchEnd(e, 'genre')}>
             {renderGenreView()}
@@ -1563,7 +1552,7 @@ export default function App() {
           <div style={{ display: activeTab === 'watchlist' ? 'flex' : 'none' }} className="w-full h-full flex-col absolute inset-0 z-0 bg-[#141414]">{renderMyList('watchlist')}</div>
           <div style={{ display: activeTab === 'watched' ? 'flex' : 'none' }} className="w-full h-full flex-col absolute inset-0 z-0 bg-[#141414]">{renderMyList('watched')}</div>
           
-          {/* レイヤー4: Detail Modal（手前に被さり、丸ごとスライド対象） */}
+          {/* レイヤー4: Detail Modal */}
           {(currentModalMode === 'detail') && (
             <div className={`w-full h-full flex flex-col absolute inset-0 z-[60] bg-[#141414] ${swipeOutTarget === 'detail' ? 'slide-out-right' : 'animate-in slide-in-from-bottom-10 fade-in duration-300'}`}
                  onTouchStart={handleTouchStart} onTouchEnd={(e) => handleTouchEnd(e, 'detail')}>
