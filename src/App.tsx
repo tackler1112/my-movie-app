@@ -1695,16 +1695,17 @@ const handleAppTitleClick = () => {
         </div>
 
         {/* --- 固定フッター --- */}
-        <nav className="shrink-0 bg-[#141414]/98 backdrop-blur-xl border-t border-zinc-800 flex justify-around items-center py-2.5 px-3 pb-safe z-[150] relative">
+        {/* --- 固定フッター --- */}
+        <nav className="shrink-0 bg-[#141414]/98 backdrop-blur-xl border-t border-zinc-800 flex justify-between items-center py-2.5 px-2 pb-safe z-[150] relative">
           
-          <button id="tab-btn-home" onClick={() => handleTabClick('home')} className={`flex flex-col items-center py-1 px-3 transition cursor-pointer ${activeTab === 'home' || activeTab === 'genre_view' ? 'text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>
+          <button id="tab-btn-home" onClick={() => handleTabClick('home')} className={`flex-1 flex flex-col items-center py-1 transition cursor-pointer relative ${activeTab === 'home' || activeTab === 'genre_view' ? 'text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>
             <div className="relative">
               <Home size={24} />
             </div>
             <span className="text-xs mt-1 font-bold">ホーム</span>
           </button>
 
-          <button id="tab-btn-watchlist" onClick={() => handleTabClick('watchlist')} className={`flex flex-col items-center py-1 px-3 transition cursor-pointer ${activeTab === 'watchlist' ? 'text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>
+          <button id="tab-btn-watchlist" onClick={() => handleTabClick('watchlist')} className={`flex-1 flex flex-col items-center py-1 transition cursor-pointer relative ${activeTab === 'watchlist' ? 'text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>
             <div className="relative">
               <Bookmark size={24} />
               {footerBadges.watchlist > 0 && (
@@ -1714,7 +1715,7 @@ const handleAppTitleClick = () => {
             <span className="text-xs mt-1 font-bold">みたい！</span>
           </button>
 
-          <button id="tab-btn-watched" onClick={() => handleTabClick('watched')} className={`flex flex-col items-center py-1 px-3 transition cursor-pointer ${activeTab === 'watched' ? 'text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>
+          <button id="tab-btn-watched" onClick={() => handleTabClick('watched')} className={`flex-1 flex flex-col items-center py-1 transition cursor-pointer relative ${activeTab === 'watched' ? 'text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>
             <div className="relative">
               <CheckCircle2 size={24} />
               {footerBadges.watched > 0 && (
