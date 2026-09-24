@@ -1703,14 +1703,14 @@ const handleAppTitleClick = () => {
           <button id="tab-btn-watchlist" onClick={() => handleTabClick('watchlist')} className={`flex flex-col items-center py-1 px-3 transition cursor-pointer relative ${activeTab === 'watchlist' ? 'text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>
             <Bookmark size={24} />
             {footerBadges.watchlist > 0 && (
-              <span className="absolute top-0 right-1 bg-red-600 text-white text-[10px] font-bold w-5 h-5 flex items-center justify-center rounded-full shadow-md pt-[1px]">{footerBadges.watchlist > 99 ? '99+' : footerBadges.watchlist}</span>
+              <span className="absolute top-0.5 right-2 bg-red-600 text-white text-[10px] font-bold w-4 h-4 flex items-center justify-center rounded-full shadow-md pt-[1px]">{footerBadges.watchlist > 99 ? '99+' : footerBadges.watchlist}</span>
             )}
             <span className="text-xs mt-1 font-bold">みたい！</span>
           </button>
           <button id="tab-btn-watched" onClick={() => handleTabClick('watched')} className={`flex flex-col items-center py-1 px-3 transition cursor-pointer relative ${activeTab === 'watched' ? 'text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>
             <CheckCircle2 size={24} />
             {footerBadges.watched > 0 && (
-              <span className="absolute top-0 right-1 bg-red-600 text-white text-[10px] font-bold w-5 h-5 flex items-center justify-center rounded-full shadow-md pt-[1px]">{footerBadges.watched > 99 ? '99+' : footerBadges.watched}</span>
+              <span className="absolute top-0.5 right-2 bg-red-600 text-white text-[10px] font-bold w-4 h-4 flex items-center justify-center rounded-full shadow-md pt-[1px]">{footerBadges.watched > 99 ? '99+' : footerBadges.watched}</span>
             )}
             <span className="text-xs mt-1 font-bold">鑑賞済み</span>
           </button>
