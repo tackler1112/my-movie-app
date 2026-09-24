@@ -283,10 +283,23 @@ export default function App() {
     if (touchStartX.current > 100) return;
 
     if (diffX > 50 && Math.abs(diffY) < 60) {
-      // 1. スライド開始のトリガーを引き、アニメーションだけを開始する
+      // 1. スライド中フラグを立てて、裏でリストが消えるのを防ぐ
+      isSwipingOutRef.current = true;
       setSwipeOutTarget(type);
 
-      // 2. アニメーションが完了し画面外へ消えた後（0.25秒後）に状態をリセットする
+      // 2. 検索画面の場合：スライド開始と同時に検索条件をリセットする
+      if (type === 'search') {
+        setSearchTitle('');
+        setSelectedTags([]);
+        setSearchPerson(null);
+        setSearchCollection(null);
+        setTempFilters(defaultFilters);
+        setAppliedFilters(defaultFilters);
+        setForceSearch(false);
+        setShowFilters(false);
+      }
+
+      // 3. アニメーションが完了し画面外へ消えた後（0.25秒後）に裏側を掃除する
       setTimeout(() => {
         if (type === 'detail') {
           updateModalState(null);
@@ -296,20 +309,13 @@ export default function App() {
           setDisplayList([]); 
         }
         if (type === 'search') {
-          setSearchTitle('');
-          setSelectedTags([]);
-          setSearchPerson(null);
-          setSearchCollection(null);
-          setTempFilters(defaultFilters);
-          setAppliedFilters(defaultFilters);
-          setForceSearch(false);
-          setShowFilters(false);
           setDisplayList([]);
           setApiPage(1);
           setNextApiPage(1);
           setSortOrder('release_desc');
         }
         setSwipeOutTarget(null);
+        isSwipingOutRef.current = false;
       }, 250);
     }
   };
@@ -1233,8 +1239,8 @@ export default function App() {
       <div className="w-full h-full flex flex-col min-h-0">
         {renderAppHeader()}
         
-        {/* ↓↓↓ transition-opacity を追加し、スワイプ中は opacity-0 にして見えなくする ↓↓↓ */}
-        <div className={`shrink-0 z-30 bg-[#141414]/95 backdrop-blur-md pt-3 pb-3 px-4 border-b border-zinc-800/50 transition-opacity duration-200 ${swipeOutTarget === 'search' ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
+        {/* 検索ヘッダー（透明化アニメーションを削除し、通常通り配置） */}
+        <div className="shrink-0 z-30 bg-[#141414]/95 backdrop-blur-md pt-3 pb-3 px-4 border-b border-zinc-800/50">
           <div className="flex flex-col gap-2.5 relative">
             <div className="flex gap-2 relative">
               <div className="relative flex-1">
@@ -1350,7 +1356,6 @@ export default function App() {
         {/* スクロールコンテンツエリア */}
         <div className="flex-1 overflow-hidden relative flex flex-col">
           
-          {/* ↓裏に常に配置されるベースのホーム画面（z-0） */}
           <div className="w-full h-full overflow-y-auto space-y-6 pb-8 bg-[#141414] absolute inset-0 z-0">
             {isHomeLoading ? (
               <div className="flex flex-col items-center justify-center h-64 gap-3 text-zinc-500"><Loader2 size={32} className="animate-spin text-red-600" /><p className="text-xs font-bold">取得中...</p></div>
@@ -1418,9 +1423,9 @@ export default function App() {
             )}
           </div>
 
-          {/* ↓手前に被さる検索結果画面（スライド時はここが動く） */}
+          {/* ↓手前に被さる検索結果画面（スライド時はここが動く。z-50に変更して完全に重なるように） */}
           {(isSearchActive || swipeOutTarget === 'search') && (
-            <div className={`w-full h-full overflow-y-auto pb-6 px-4 pt-4 bg-[#141414] absolute inset-0 z-10 ${swipeOutTarget === 'search' ? 'slide-out-right' : 'animate-in fade-in'}`}
+            <div className={`w-full h-full overflow-y-auto pb-6 px-4 pt-4 bg-[#141414] absolute inset-0 z-50 ${swipeOutTarget === 'search' ? 'slide-out-right' : 'animate-in fade-in'}`}
                  onTouchStart={handleTouchStart} onTouchEnd={(e) => handleTouchEnd(e, 'search')}>
               {visibleSearchResults.length > 0 ? (
                 <>
@@ -1453,11 +1458,11 @@ export default function App() {
     const visibleGenreList = displayList;
 
     return (
-      // ↓↓↓ 画面全体（ヘッダー含む）をスライド対象にする ↓↓↓
-      <div className={`w-full h-full flex flex-col min-h-0 bg-[#141414] ${swipeOutTarget === 'genre' ? 'slide-out-right' : 'animate-in fade-in duration-200'}`}
+      // ↓↓↓ 画面全体を絶対配置(absolute inset-0)にし、中ヘッダーごとスライドさせる ↓↓↓
+      <div className={`absolute inset-0 flex flex-col bg-[#141414] z-[60] ${swipeOutTarget === 'genre' ? 'slide-out-right' : 'animate-in fade-in duration-200'}`}
            onTouchStart={handleTouchStart} onTouchEnd={(e) => handleTouchEnd(e, 'genre')}>
         
-        <div className="shrink-0">
+        <div className="shrink-0 relative z-50">
           {renderAppHeader()}
           <header className="bg-[#141414]/90 backdrop-blur-md px-4 py-3 flex items-center justify-between z-30 border-b border-zinc-800">
             <div className="flex items-center gap-3">
@@ -1477,7 +1482,7 @@ export default function App() {
           </header>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4">
+        <div className="flex-1 overflow-y-auto p-4 relative pointer-events-auto">
           {visibleGenreList.length > 0 ? (
             <>
               <div className="grid grid-cols-3 gap-2">
